@@ -4,8 +4,6 @@ from backend.patient import Patient
 from backend.hospital_entity import HospitalEntity
 from blockchain.backend.core.transaction import Transaction
 from blockchain.backend.core.transaction_body import TransactionBody
-from blockchain.backend.core.block import Block
-from blockchain.backend.core.block_header import BlockHeader
 from blockchain.backend.core.chain import Chain
 from datetime import datetime
 
@@ -35,9 +33,11 @@ transaction = Transaction(transaction_body)
 
 hospital.sign(transaction)
 
-chain = Chain()
+chain = Chain('asdfas')
+chain.add_block(transaction,medical_record)
 
-block = Block(0,BlockHeader('asdf','asdfa',4),transaction)
-block.is_valid(medical_record)
+print(chain)
+
+
 
 
