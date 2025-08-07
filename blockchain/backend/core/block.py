@@ -1,3 +1,4 @@
+from __future__ import annotations
 from blockchain.backend.util import util
 from blockchain.backend.core.transaction import Transaction
 from blockchain.backend.core.block_header import BlockHeader
@@ -27,39 +28,34 @@ class Block:
             self.header.nonce+=1
             self.header.block_hash = self.get_hash()
 
-    def is_valid(self, medical_record:dict[str,any]):
+    @staticmethod
+    def is_valid(block:Block, chain):
 
         #Validacija bloka
-        #1. Provera da li postoje adrese u bazi
-        #2. Proverava se da li je digitani potpis vaslidan
-        #3. Proveraa se da li zdravstveni zapis sadrzi obavezna polja i da li transakcija sadrzi sva obavezna polja
+        #1. Provera da li blok povezan sa chain-om
+        #2. Proverava se da li ima validnu transakciju
+        #3. Proveraa se da li ima dobar merkle root
+        #4. Proverava se hash, odnosno resenje proof of work-a
 
-        print("🔍 Validation: ")
-        accounts = util.read_from_json_file("./blockchain/db/accounts.json")
+        print(f"🔍 #{block.header.height} Block Validation: \n")
 
-        if isinstance(accounts,list) is False:
-            print("❌ Adrese su nevalidne.")
-
+        if block.header.previous_block_hash != chain.get_last_block().header.block_hash:
+            print("❌ Invalid Block - Invalid Previous Block Hash")
+            return False
         
-        if [a for a in accounts if a.get("public_key") == self.transaction.body.creator] is False or [a for a in accounts if a.get("public_key") == self.transaction.body.patient] is False:
-            print("❌ Adresa nije nevalidna.")
+        if Transaction.is_valid(block.transaction,chain.medical_record) is False:
+            print("❌ Invalid Block - Invalid Transaction")
+            return False
+        
+        if block.header.merkle_root != util.hash256(block.transaction or ""):
+            print("❌ Invalid Block - Invalid Merkle Root")
             return False
 
-        print("✅ Adrese su validne.")
-
-        bytes_object = util.object_to_canonical_bytes_json(self.transaction.body)
-
-        if util.verify_signature(bytes_object, self.transaction.signature, util.get_raw_key(self.transaction.body.creator)) is False:
+        if block.header.block_hash != block.get_hash():
+            print("❌ Invalid Block - Invalid Block Hash")
             return False
-
-        required_keys = ["id", "patient_id", "patient_name","doctor_name","doctor_id","hospital_name","hospital_id"]
-
-        if all(key in medical_record for key in required_keys) is False or self.transaction.body.location == None or self.transaction.body.date is None:
-            print("❌ Transakcija je nevalidna.") 
-
-        print("✅ Transakcija je validna.")
-
-        self.transaction.body.medical_record_hash = util.hash256(medical_record)
+        
+        print(f"\n✅ #{block.header.height} Block is valid.")
 
         return True
         

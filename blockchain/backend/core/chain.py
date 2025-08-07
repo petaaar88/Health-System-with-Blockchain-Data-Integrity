@@ -5,9 +5,11 @@ from blockchain.backend.core.transaction import Transaction
 class Chain:
     def __init__(self, miner, initial_time_to_mine = 30000, initial_difficulty = 5):
         self.difficulty = initial_difficulty
-        self.time_to_mine = initial_time_to_mine
+        self.time_to_mine = initial_time_to_mine #TODO ako stignem da namestim da se automatski podesava vreme kopanja
         self.miner = miner
         self.chain = [self.create_genesis_block()] 
+        self.tx = None
+        self.medical_record = None
 
     def create_genesis_block(self):
         genesis_block = Block(BlockHeader(0,self.difficulty,None,None),None)
@@ -19,21 +21,38 @@ class Chain:
     def get_last_block(self):
         return self.chain[-1]
 
-    def add_block(self, transaction:Transaction, medical_record):
+    def create_new_block(self):
 
         last_block = self.get_last_block()
         new_block_height = last_block.header.height + 1
 
-        block = Block(BlockHeader(new_block_height,self.difficulty,self.miner,last_block.header.block_hash),transaction)
-        if Transaction.is_valid(transaction, medical_record) is False: #ovde treba van bloka da se proveri, ondnosno u transakciij i drugom metodi
-            return None 
+        block = Block(BlockHeader(new_block_height,self.difficulty,self.miner,last_block.header.block_hash),self.tx)
         
         block.mine()
 
-        print("\n✔️  Blok uspešno iskopan")
+        print(f"\n✔️  Blok uspešno iskopan od strane {self.miner}") #TODO ovde ide majner iz bloka koji je izmajnovao
         print(block)
-        self.chain.append(block)
+
+        return block
+    
+    def add_to_block_to_chain(self, block: Block):
         
+        self.chain.append(block)
+
+        self.tx = None
+        self.medical_record = None
+        
+    def add_transaction(self, transaction:Transaction, medical_record):
+        if Transaction.is_valid(transaction, medical_record) is False: #ovde treba van bloka da se proveri, ondnosno u transakciij i drugom metodi
+            return False 
+         
+        self.tx = transaction
+        self.medical_record = medical_record
+
+        return True
+         
+
+
     def __str__(self):
         chain_to_string = "\nChain: \n[\n"
         for block in self.chain:

@@ -5,6 +5,7 @@ from backend.hospital_entity import HospitalEntity
 from blockchain.backend.core.transaction import Transaction
 from blockchain.backend.core.transaction_body import TransactionBody
 from blockchain.backend.core.chain import Chain
+from blockchain.backend.core.block import Block
 from datetime import datetime
 
 
@@ -28,13 +29,18 @@ medical_record = {
     "hospital_id":"asdfasdfasfasdf"
   }
 
-transaction_body = TransactionBody(hospital.public_key,patient.public_key, 'https:://nseto',datetime.now().isoformat())
+transaction_body = TransactionBody(hospital.public_key,patient.public_key, 'https:://nseto',datetime.now().isoformat(),util.hash256(medical_record))
 transaction = Transaction(transaction_body)
-
 hospital.sign(transaction)
 
 chain = Chain('asdfas')
-chain.add_block(transaction,medical_record)
+
+if chain.add_transaction(transaction,medical_record) is True:
+  new_block = chain.create_new_block()
+  
+  if Block.is_valid(new_block,chain) is True:
+    chain.add_to_block_to_chain(new_block)
+   
 
 print(chain)
 

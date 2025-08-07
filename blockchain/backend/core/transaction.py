@@ -15,7 +15,7 @@ class Transaction:
         #2. Proverava se da li je digitani potpis vaslidan
         #3. Proveraa se da li zdravstveni zapis sadrzi obavezna polja i da li transakcija sadrzi sva obavezna polja
 
-        print("🔍 Validation: ")
+        print("🔍 Transaction Validation: ")
         accounts = util.read_from_json_file("./blockchain/db/accounts.json")
 
         if isinstance(accounts,list) is False:
