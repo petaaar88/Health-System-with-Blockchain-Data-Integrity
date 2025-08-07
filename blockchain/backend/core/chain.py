@@ -25,7 +25,7 @@ class Chain:
         new_block_height = last_block.header.height + 1
 
         block = Block(BlockHeader(new_block_height,self.difficulty,self.miner,last_block.header.block_hash),transaction)
-        if block.is_valid(medical_record) is False: #ovde treba van bloka da se proveri, ondnosno u transakciij i drugom metodi
+        if Transaction.is_valid(transaction, medical_record) is False: #ovde treba van bloka da se proveri, ondnosno u transakciij i drugom metodi
             return None 
         
         block.mine()
