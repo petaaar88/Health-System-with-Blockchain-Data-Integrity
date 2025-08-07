@@ -1,4 +1,3 @@
-import hashlib
 import json
 from Crypto.PublicKey import RSA
 from Crypto.Hash import SHA256
@@ -8,10 +7,10 @@ from dataclasses import asdict
 
 def double_hash256(s):
     # two rounds of sha265
-    return hashlib.sha256(hashlib.sha256(str(s).encode('utf-8')).digest()).hexdigest()
+    return  SHA256.new(SHA256.new(str(s).encode('utf-8')).digest()).hexdigest()
 
 def hash256(s):
-    return hashlib.sha256(str(s).encode('utf-8')).hexdigest()
+    return SHA256.new(str(s).encode('utf-8')).hexdigest()
 
 
 def write_to_json_file(path:str, data:dict[str,any], mode = "w"):
