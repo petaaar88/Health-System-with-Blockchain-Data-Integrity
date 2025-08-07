@@ -73,9 +73,9 @@ def verify_signature(data:bytes, signature, key):
 
     try:
         pss.new(key).verify(data_hash, signature)
-        print("✅ Potpis je validan.")
+        print("✅ Signature is valid.")
     except (ValueError, TypeError):
-        print("❌ Nevažeći potpis!")
+        print("❌ Signature is invalid!")
         return False
     
     return True

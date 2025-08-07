@@ -62,10 +62,10 @@ class Chain:
                     current_block.header.block_hash != current_block.get_hash()
                     or prev_block.header.block_hash != current_block.header.previous_block_hash
                 ):
-                    print("❌ Chain is invalid")
+                    print(f"❌ {chain.miner} Node chain is invalid!")
                     return False
             
-        print(f"\n✅ {chain.miner} Node chain is valid")
+        print(f"\n✅ {chain.miner} Node chain is valid.")
         return True
 
 

@@ -19,14 +19,14 @@ class Transaction:
         accounts = util.read_from_json_file("./blockchain/db/accounts.json")
 
         if isinstance(accounts,list) is False:
-            print("❌ Adrese su nevalidne.")
+            print("❌ Addresses are invalid!")
 
         
         if [a for a in accounts if a.get("public_key") == transaction.body.creator] is False or [a for a in accounts if a.get("public_key") == transaction.body.patient] is False:
-            print("❌ Adresa nije nevalidna.")
+            print("❌ Addresse is invalid!")
             return False
 
-        print("✅ Adrese su validne.")
+        print("✅ Addresses are valid.")
 
         bytes_object = util.object_to_canonical_bytes_json(transaction.body)
 
@@ -36,9 +36,9 @@ class Transaction:
         required_keys = ["id", "patient_id", "patient_name","doctor_name","doctor_id","hospital_name","hospital_id"]
 
         if all(key in medical_record for key in required_keys) is False or transaction.body.location == None or transaction.body.date is None:
-            print("❌ Transakcija je nevalidna.") 
+            print("❌ Transaction is invalid!") 
 
-        print("✅ Transakcija je validna.")
+        print("✅ Transaction is valid.")
 
         transaction.body.medical_record_hash = util.hash256(medical_record)
     

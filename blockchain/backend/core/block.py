@@ -43,19 +43,19 @@ class Block:
         print(f"🔍 #{block.header.height} Block Validation: \n")
 
         if block.header.previous_block_hash != chain.get_last_block().header.block_hash:
-            print("❌ Invalid Block - Invalid Previous Block Hash")
+            print("❌ Invalid block - Invalid previous block hash!")
             return False
         
         if Transaction.is_valid(block.transaction,chain.medical_record) is False:
-            print("❌ Invalid Block - Invalid Transaction")
+            print("❌ Invalid block - invalid transaction!")
             return False
         
         if block.header.merkle_root != util.hash256(block.transaction or ""):
-            print("❌ Invalid Block - Invalid Merkle Root")
+            print("❌ Invalid block - Invalid merkle root!")
             return False
 
         if block.header.block_hash != block.get_hash():
-            print("❌ Invalid Block - Invalid Block Hash")
+            print("❌ Invalid block - Invalid block hash!")
             return False
         
         print(f"\n✅ #{block.header.height} Block is valid.")
