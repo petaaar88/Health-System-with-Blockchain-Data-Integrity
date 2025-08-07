@@ -23,10 +23,13 @@ class Block:
         )
 
     def mine(self):
-        print("\n⛏️  Minning...")
+        print(f"\n⛏️  #{self.header.height} Block Minning...")
         while not self.header.block_hash.startswith("0" * self.header.difficulty):
             self.header.nonce+=1
             self.header.block_hash = self.get_hash()
+
+        print(f"\n✔️  #{self.header.height} Blok successfully mined by {self.header.miner}.\n") #TODO ovde ide majner iz bloka koji je izmajnovao
+        print(self)
 
     @staticmethod
     def is_valid(block:Block, chain):

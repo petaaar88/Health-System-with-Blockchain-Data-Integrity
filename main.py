@@ -41,7 +41,7 @@ if chain.add_transaction(transaction,medical_record) is True:
   if Block.is_valid(new_block,chain) is True:
     chain.add_to_block_to_chain(new_block)
    
-
+Chain.is_valid(chain)
 print(chain)
 
 

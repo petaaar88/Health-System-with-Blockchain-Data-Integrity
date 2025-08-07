@@ -1,3 +1,4 @@
+from __future__ import annotations
 from blockchain.backend.core.block import Block
 from blockchain.backend.core.block_header import BlockHeader
 from blockchain.backend.core.transaction import Transaction
@@ -30,9 +31,6 @@ class Chain:
         
         block.mine()
 
-        print(f"\n✔️  Blok uspešno iskopan od strane {self.miner}") #TODO ovde ide majner iz bloka koji je izmajnovao
-        print(block)
-
         return block
     
     def add_to_block_to_chain(self, block: Block):
@@ -51,6 +49,24 @@ class Chain:
 
         return True
          
+    @staticmethod
+    def is_valid(chain: Chain):
+        for i in range(1, len(chain.chain)):
+            current_block:Block = chain.chain[i]
+            prev_block:Block = chain.chain[i - 1]
+
+            if(current_block.header.previous_block_hash == None and current_block.header.miner == None):
+                continue
+            else:
+                if (
+                    current_block.header.block_hash != current_block.get_hash()
+                    or prev_block.header.block_hash != current_block.header.previous_block_hash
+                ):
+                    print("❌ Chain is invalid")
+                    return False
+            
+        print(f"\n✅ {chain.miner} Node chain is valid")
+        return True
 
 
     def __str__(self):
