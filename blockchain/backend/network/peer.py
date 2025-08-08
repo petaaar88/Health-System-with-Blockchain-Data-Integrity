@@ -3,6 +3,8 @@ import websockets
 import json
 import uuid
 from blockchain.backend.core.chain import Chain
+from blockchain.backend.core.transaction import Transaction
+from blockchain.backend.core.block import Block
 
 class Peer:
     def __init__(self, port=8765):
@@ -10,6 +12,7 @@ class Peer:
         self.my_uri = f"ws://localhost:{port}"
         self.my_id = str(uuid.uuid4())[:8]
         self.chain = Chain(self.my_id)
+        
         
         # Razdvojimo incoming i outgoing konekcije
         self.incoming_peers = {}    # {ws: peer_info}
@@ -50,10 +53,13 @@ class Peer:
                 
             elif msg_type == "PEERS":
                 await self._handle_peers_list(sender_id, data)
-
+            #TODO prepavi da drugacije radi, da mora da postoji verifikacija svih nodova pre nego sto se posalje
             elif msg_type == "CLIENT_GET_CHAIN":
                 await self._handle_getting_chain(ws)
-                
+            #TODO obrisi jer je samo pokazna metoda koja pokazuje kako radi blockchain kada mu se sa strane posalju podaci
+            elif msg_type == "MINE":
+                await self._handle_mine(ws, data)
+
             else:
                 print(f"[WARN] Unknown message type: {msg_type}")
 
@@ -76,6 +82,28 @@ class Peer:
             "uri": self.my_uri
         })
     
+    #TODO obrisi jer je samo pokazna metoda koja pokazuje kako radi blockchain kada mu se sa strane posalju podaci
+    async def _handle_mine(self,ws, data):
+
+        medical_record = data["data_for_validation"]
+        transaction = Transaction.from_dict(data["transaction"])
+
+        if self.chain.add_transaction(transaction,medical_record) is True:
+            new_block = self.chain.create_new_block()
+        
+        if Block.is_valid(new_block,self.chain) is True:
+            self.chain.add_to_block_to_chain(new_block)
+
+        response = {
+            "chain":[]
+        }
+        #TODO neki koncencus imzedj svih nodova da li imaju svi isti chain
+        for block in self.chain.chain:
+            response["chain"].append(block.to_dict())
+
+        await ws.send(json.dumps(response, indent=4))
+
+
     async def _handle_getting_chain(self, ws):
 
         response = {
