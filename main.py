@@ -6,6 +6,7 @@ from blockchain.backend.core.transaction import Transaction
 from blockchain.backend.core.transaction_body import TransactionBody
 from blockchain.backend.core.chain import Chain
 from blockchain.backend.core.block import Block
+from blockchain.backend.network.node import Node
 from datetime import datetime
 
 
@@ -33,7 +34,7 @@ transaction_body = TransactionBody(hospital.public_key,patient.public_key, 'http
 transaction = Transaction(transaction_body)
 hospital.sign(transaction)
 
-chain = Chain('asdfas')
+chain = Chain('asdfas',20,5)
 
 if chain.add_transaction(transaction,medical_record) is True:
   new_block = chain.create_new_block()
@@ -41,6 +42,7 @@ if chain.add_transaction(transaction,medical_record) is True:
   if Block.is_valid(new_block,chain) is True:
     chain.add_to_block_to_chain(new_block)
    
+
 Chain.is_valid(chain)
 print(chain)
 
