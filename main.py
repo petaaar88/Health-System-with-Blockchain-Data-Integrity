@@ -6,7 +6,6 @@ from blockchain.backend.core.transaction import Transaction
 from blockchain.backend.core.transaction_body import TransactionBody
 from blockchain.backend.core.chain import Chain
 from blockchain.backend.core.block import Block
-from blockchain.backend.network.node import Node
 from datetime import datetime
 
 
@@ -33,6 +32,7 @@ medical_record = {
 transaction_body = TransactionBody(hospital.public_key,patient.public_key, 'https:://nseto',datetime.now().isoformat(),util.hash256(medical_record))
 transaction = Transaction(transaction_body)
 hospital.sign(transaction)
+
 
 chain = Chain('asdfas',20,5)
 

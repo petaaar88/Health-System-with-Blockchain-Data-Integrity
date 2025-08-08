@@ -50,6 +50,9 @@ class Peer:
                 
             elif msg_type == "PEERS":
                 await self._handle_peers_list(sender_id, data)
+
+            elif msg_type == "CLIENT_GET_CHAIN":
+                await self._handle_getting_chain(ws)
                 
             else:
                 print(f"[WARN] Unknown message type: {msg_type}")
@@ -73,6 +76,18 @@ class Peer:
             "uri": self.my_uri
         })
     
+    async def _handle_getting_chain(self, ws):
+
+        response = {
+            "chain":[]
+        }
+        #TODO neki koncencus imzedj svih nodova da li imaju svi isti chain
+        for block in self.chain.chain:
+            response["chain"].append(block.to_dict())
+
+        await ws.send(json.dumps(response, indent=4))
+
+
     async def _handle_handshake_ack(self, data):
         """Obrađuje HANDSHAKE_ACK poruke"""
         peer_id = data.get("peer_id")
