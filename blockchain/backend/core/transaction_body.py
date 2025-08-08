@@ -8,3 +8,11 @@ class TransactionBody:
 
     def __str__(self):
         return f"{{\n     creator: {self.creator}, \n     patient: {self.patient}, \n     medical_record_hash: {self.medical_record_hash}, \n     location: {self.location}, \n     date: {self.date}\n   }}"
+    def to_dict(self):
+        return {
+            "creator": self.creator,
+            "patient": self.patient,
+            "medical_record_hash": self.medical_record_hash,
+            "date": self.date ,
+            "location": self.location
+        }

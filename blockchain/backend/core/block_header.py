@@ -17,4 +17,16 @@ class BlockHeader:
     def __str__(self):
         return f"   Header: {{ \n     height: {self.height}, \n     id: {self.id}, \n     merkle root: {self.merkle_root}, \n     previous block hash: {self.previous_block_hash},\n     timestamp: {self.timestamp},\n     nonce: {self.nonce},\n     difficulty: {self.difficulty} \n     miner: {self.miner}, \n     block hash: {self.block_hash} \n   }},"
 
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "previous_block_hash": self.previous_block_hash,
+            "merkle_root": self.merkle_root,
+            "timestamp": self.timestamp.isoformat() if isinstance(self.timestamp, datetime) else self.timestamp,
+            "height": self.height,
+            "difficulty": self.difficulty,
+            "nonce": self.nonce,
+            "miner": self.miner,
+            "block_hash": self.block_hash
+        }
    

@@ -65,5 +65,10 @@ class Block:
     def __str__(self):
         return f" {{\n{self.header} \n   Transaction: {self.transaction}\n }}"
 
+    def to_dict(self):
+        return {
+            "header": self.header.to_dict() if hasattr(self.header, "to_dict") else None,
+            "transaction": self.transaction.to_dict()  if hasattr(self.transaction, "to_dict") else None
+        }
 
         

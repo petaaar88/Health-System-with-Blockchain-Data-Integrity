@@ -44,6 +44,12 @@ class Transaction:
     
     def __str__(self):
         return f"{self.body}"
+    
+    def to_dict(self):
+        return {
+            "signature": str(self.signature),
+            "body":self.body.to_dict() if hasattr(self.header, "to_dict") else None,
+        }
 
 
 
