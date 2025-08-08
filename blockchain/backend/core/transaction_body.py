@@ -8,6 +8,7 @@ class TransactionBody:
 
     def __str__(self):
         return f"{{\n     creator: {self.creator}, \n     patient: {self.patient}, \n     medical_record_hash: {self.medical_record_hash}, \n     location: {self.location}, \n     date: {self.date}\n   }}"
+    
     def to_dict(self):
         return {
             "creator": self.creator,
@@ -16,3 +17,7 @@ class TransactionBody:
             "date": self.date ,
             "location": self.location
         }
+    
+    @staticmethod
+    def from_dict(transaction_body_dict:str):
+        return TransactionBody(transaction_body_dict.get("creator"),transaction_body_dict.get("patient"), transaction_body_dict.get("location"),transaction_body_dict.get("date"),transaction_body_dict.get("medical_record_hash"))

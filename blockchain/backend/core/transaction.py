@@ -4,7 +4,7 @@ from blockchain.backend.util import util
 
 class Transaction:
     def __init__(self, transaction_body:TransactionBody):
-        self.signature = None
+        self.signature:bytes = None
         self.body = transaction_body
 
     @staticmethod
@@ -47,9 +47,17 @@ class Transaction:
     
     def to_dict(self):
         return {
-            "signature": str(self.signature),
-            "body":self.body.to_dict() if hasattr(self.header, "to_dict") else None,
+            "signature": self.signature.hex(),
+            "body":self.body.to_dict() if hasattr(self.body, "to_dict") else None,
         }
+    
+    @staticmethod
+    def from_dict(transaction_dict:dict):
+        tx = Transaction(TransactionBody.from_dict(transaction_dict.get("body")))
+        tx.signature = bytes.fromhex(transaction_dict.get("signature"))
+        return tx
+
+
 
 
 
