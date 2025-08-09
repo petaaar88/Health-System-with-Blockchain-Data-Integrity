@@ -4,13 +4,17 @@ from blockchain.backend.core.block_header import BlockHeader
 from blockchain.backend.core.transaction import Transaction
 
 class Chain:
-    def __init__(self, miner, initial_time_to_mine = 30000, initial_difficulty = 5):
+    def __init__(self, miner, initial_time_to_mine = 30000, initial_difficulty = 1):
         self.difficulty = initial_difficulty
         self.time_to_mine = initial_time_to_mine #TODO ako stignem da namestim da se automatski podesava vreme kopanja
         self.miner = miner
         self.chain = [self.create_genesis_block()] 
         self.tx = None
         self.medical_record = None
+        self.mined_block = None
+        self.is_mining = False
+        self.can_mine = True
+        
 
     def create_genesis_block(self):
         genesis_block = Block(BlockHeader(0,self.difficulty,None,None),None)
@@ -23,13 +27,17 @@ class Chain:
         return self.chain[-1]
 
     def create_new_block(self):
+        
+        self.is_mining = True
 
         last_block = self.get_last_block()
         new_block_height = last_block.header.height + 1
 
         block = Block(BlockHeader(new_block_height,self.difficulty,self.miner,last_block.header.block_hash),self.tx)
         
-        block.mine()
+        block.mine(self)
+
+        self.mined_block = block
 
         return block
     
