@@ -20,6 +20,7 @@ class Transaction:
 
         if isinstance(accounts,list) is False:
             print("❌ Addresses are invalid!")
+            return False
 
         
         if [a for a in accounts if a.get("public_key") == transaction.body.creator] is False or [a for a in accounts if a.get("public_key") == transaction.body.patient] is False:
@@ -37,6 +38,7 @@ class Transaction:
 
         if all(key in medical_record for key in required_keys) is False or transaction.body.location == None or transaction.body.date is None:
             print("❌ Transaction is invalid!") 
+            return False
 
         print("✅ Transaction is valid.")
 
