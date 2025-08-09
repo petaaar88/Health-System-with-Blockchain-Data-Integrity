@@ -1,4 +1,5 @@
 from __future__ import annotations
+import uuid
 from blockchain.backend.core.transaction_body import TransactionBody
 from blockchain.backend.util import util
 
@@ -6,6 +7,7 @@ class Transaction:
     def __init__(self, transaction_body:TransactionBody):
         self.signature:bytes = None
         self.body = transaction_body
+        self.id = uuid.uuid4().hex
 
     @staticmethod
     def is_valid(transaction: Transaction, medical_record):
@@ -49,6 +51,7 @@ class Transaction:
     
     def to_dict(self):
         return {
+            "id":self.id,
             "signature": self.signature.hex(),
             "body":self.body.to_dict() if hasattr(self.body, "to_dict") else None,
         }
@@ -57,6 +60,7 @@ class Transaction:
     def from_dict(transaction_dict:dict):
         tx = Transaction(TransactionBody.from_dict(transaction_dict.get("body")))
         tx.signature = bytes.fromhex(transaction_dict.get("signature"))
+        tx.id = transaction_dict.get("id")
         return tx
 
 
