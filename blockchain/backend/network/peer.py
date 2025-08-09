@@ -2,6 +2,7 @@ import asyncio
 import websockets
 import json
 import uuid
+import threading
 from blockchain.backend.core.chain import Chain
 from blockchain.backend.core.transaction import Transaction
 from blockchain.backend.core.block import Block
@@ -98,13 +99,12 @@ class Peer:
         is_valid = False
 
         if self.chain.add_transaction(transaction,medical_record):
-            print(f"\n✅ [INFO] Peer {self.my_id}: Transaction is valid.")
+            print(f"\n✅ [INFO] Peer {self.my_id}: Transaction {transaction.id} is valid.")
             is_valid = True
         else:
-            print(f"\n❌ [INFO] Peer {self.my_id}: Transaction is invalid!")
+            print(f"\n❌ [INFO] Peer {self.my_id}: Transaction {transaction.id} is invalid!")
             is_valid = False
         
-        print("radi")
         return is_valid
 
     async def _handle_verify_transaction(self, data):
@@ -197,23 +197,28 @@ class Peer:
         return int(network_size * self.consensus_threshold) + 1
 
     def _check_transaction_consensus(self):
-        print("koncezus")
-        """
-        votes = self.transaction_votes[tx_id]
+        
         required_votes = self.calculate_required_votes()
+
+        print("Potrebni glasovi" + str(required_votes))
         
-        positive_votes = sum(1 for vote in votes.values() if vote)
-        negative_votes = sum(1 for vote in votes.values() if not vote)
+        def izdvoji_po_validnosti(lista):
+            validne = [item for item in lista if item.get("vote") is True]
+            nevalidne = [item for item in lista if item.get("vote") is False]
+            return validne, nevalidne
         
-        print(f"📊 Transaction {tx_id}: +{positive_votes} -{negative_votes} (need {required_votes})")
+        positive_votes, negative_votes = izdvoji_po_validnosti(self.transaction_votes)
         
-        if positive_votes >= required_votes:
-            print(f"✅ Transaction {tx_id} ACCEPTED by consensus")
-            await self._start_mining_phase(tx_id)
-        elif negative_votes >= required_votes:
-            print(f"❌ Transaction {tx_id} REJECTED by consensus")
-            await self._cleanup_transaction(tx_id)
-            """
+        if len(positive_votes) >= required_votes:
+            print(f"👥✅ Transaction  ACCEPTED by consensus")
+            mining_thread = threading.Thread(target=self.chain.create_new_block, daemon=True)
+            mining_thread.start()
+            
+        else:
+            print(f"👥❌ Transaction  REJECTED by consensus")
+        
+        self.is_transaction_validation = False
+    
 
     async def start_server(self):
         """Pokretanje peer servera"""
@@ -296,17 +301,11 @@ class Peer:
         """Loop za korisnikov input"""
         loop = asyncio.get_event_loop()
         while True:
-            print(self.transaction_votes)
             if self.is_transaction_validation and self.get_network_size() == len(self.transaction_votes):
                 self._check_transaction_consensus()
                 
 
-            # ovo sluzi za testiranje 
-            await loop.run_in_executor(None, input, 
-                f"[Peer {self.my_id}] Press ENTER to broadcast NEW_BLOCK. Connected peers: {list(self.outgoing_peers.keys())}\n")
-            """
-            await self.broadcast("NEW_BLOCK", {"block": f"Manual block from {self.my_id}"})
-            """
+            await asyncio.sleep(0.1)  # mala pauza da se event loop oslobodi
     
     async def run(self, initial_peers=None):
         """Glavna metoda za pokretanje peer-a"""

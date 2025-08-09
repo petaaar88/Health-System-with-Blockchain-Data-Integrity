@@ -17,7 +17,7 @@ class Transaction:
         #2. Proverava se da li je digitani potpis vaslidan
         #3. Proveraa se da li zdravstveni zapis sadrzi obavezna polja i da li transakcija sadrzi sva obavezna polja
 
-        print("🔍 Transaction Validation: ")
+        print(f"🔍 Transaction {transaction.id} Validation: ")
         accounts = util.read_from_json_file("./blockchain/db/accounts.json")
 
         if isinstance(accounts,list) is False:
@@ -39,10 +39,10 @@ class Transaction:
         required_keys = ["id", "patient_id", "patient_name","doctor_name","doctor_id","hospital_name","hospital_id"]
 
         if all(key in medical_record for key in required_keys) is False or transaction.body.location == None or transaction.body.date is None:
-            print("❌ Transaction is invalid!") 
+            print(f"❌ Transaction {transaction.id} is invalid!") 
             return False
 
-        print("✅ Transaction is valid.")
+        print(f"✅ Transaction {transaction.id} is valid.")
 
         transaction.body.medical_record_hash = util.hash256(medical_record)
     
