@@ -13,11 +13,17 @@ class Peer:
         self.my_id = str(uuid.uuid4())[:8]
         self.chain = Chain(self.my_id)
         
-        
         # Razdvojimo incoming i outgoing konekcije
         self.incoming_peers = {}    # {ws: peer_info}
         self.outgoing_peers = {}    # konekcije koje smo mi napravili ka drugima {uri: ws}
         self.known_peers = {}       # {peer_id: {"uri": uri, "id": peer_id}}
+
+        self.consensus_threshold = 0.51  # 51% konsenzus
+
+
+        #transaction validatoin concensus
+        self.is_transaction_validation = False
+        self.transaction_votes = []
     
     async def send_message(self, ws, msg_type, data):
         """Šalje poruku preko websocket konekcije"""
@@ -41,21 +47,29 @@ class Peer:
                 
             elif msg_type == "HANDSHAKE_ACK":
                 await self._handle_handshake_ack(data)
-                
-            elif msg_type == "PING":
-                await self._handle_ping(ws, sender_id)
-                
-            elif msg_type == "PONG":
-                await self._handle_pong(sender_id)
-                
+                #TODO obrisi ovo
             elif msg_type == "NEW_BLOCK":
                 await self._handle_new_block(sender_id, data)
                 
             elif msg_type == "PEERS":
                 await self._handle_peers_list(sender_id, data)
+
+            #CLIENT messages    
+                
+            elif msg_type == "CLIENT_ADD_TRANSACTION":
+                await self._handle_add_transaction(data)
+
             #TODO prepavi da drugacije radi, da mora da postoji verifikacija svih nodova pre nego sto se posalje
             elif msg_type == "CLIENT_GET_CHAIN":
                 await self._handle_getting_chain(ws)
+
+            # Transaction messages
+            elif msg_type == "VERIFY_TRANSACTION":
+                await self._handle_verify_transaction(data)
+
+            elif msg_type == "TRANSACTION_VOTE":
+                await self._handle_transactin_vote(data)
+
             #TODO obrisi jer je samo pokazna metoda koja pokazuje kako radi blockchain kada mu se sa strane posalju podaci
             elif msg_type == "MINE":
                 await self._handle_mine(ws, data)
@@ -66,22 +80,43 @@ class Peer:
         except Exception as e:
             print(f"[ERROR] handle_message: {e}")
     
-    async def _handle_handshake(self, ws, data):
-        """Obrađuje HANDSHAKE poruke"""
-        peer_id = data.get("peer_id")
-        peer_uri = data.get("uri")
-        print(f"🤝 [RECV] Peer {self.my_id}: HANDSHAKE from {peer_id} ({peer_uri})")
+    async def _handle_add_transaction(self,data):
+
+        await self.broadcast("VERIFY_TRANSACTION", data)
+        transaction_vote = {"id":self.my_id, "vote":self.verify_transaction(data)}
+
+        self.transaction_votes.append(transaction_vote)
+        await self.broadcast("TRANSACTION_VOTE",transaction_vote)
+       
+
+    def verify_transaction(self,data):
+        self.is_transaction_validation = True
+        medical_record = data["data_for_validation"]
         
-        # Dodaj peer u incoming_peers sa njegovim ID-om
-        self.incoming_peers[ws] = {"id": peer_id, "uri": peer_uri}
-        self.known_peers[peer_id] = {"uri": peer_uri, "id": peer_id}
+        transaction = Transaction.from_dict(data["transaction"])
+
+        is_valid = False
+
+        if self.chain.add_transaction(transaction,medical_record):
+            print(f"\n✅ [INFO] Peer {self.my_id}: Transaction is valid.")
+            is_valid = True
+        else:
+            print(f"\n❌ [INFO] Peer {self.my_id}: Transaction is invalid!")
+            is_valid = False
         
-        # Odgovori sa svojim handshake
-        await self.send_message(ws, "HANDSHAKE_ACK", {
-            "peer_id": self.my_id,
-            "uri": self.my_uri
-        })
-    
+        print("radi")
+        return is_valid
+
+    async def _handle_verify_transaction(self, data):
+        
+        transaction_vote = {"id":self.my_id, "vote":self.verify_transaction(data)}
+
+        self.transaction_votes.append(transaction_vote)
+        await self.broadcast("TRANSACTION_VOTE",transaction_vote)
+
+    async def _handle_transactin_vote(self,data):
+        self.transaction_votes.append(data)
+
     #TODO obrisi jer je samo pokazna metoda koja pokazuje kako radi blockchain kada mu se sa strane posalju podaci
     async def _handle_mine(self,ws, data):
 
@@ -103,7 +138,22 @@ class Peer:
 
         await ws.send(json.dumps(response, indent=4))
 
-
+    async def _handle_handshake(self, ws, data):
+        """Obrađuje HANDSHAKE poruke"""
+        peer_id = data.get("peer_id")
+        peer_uri = data.get("uri")
+        print(f"🤝 [RECV] Peer {self.my_id}: HANDSHAKE from {peer_id} ({peer_uri})")
+        
+        # Dodaj peer u incoming_peers sa njegovim ID-om
+        self.incoming_peers[ws] = {"id": peer_id, "uri": peer_uri}
+        self.known_peers[peer_id] = {"uri": peer_uri, "id": peer_id}
+        
+        # Odgovori sa svojim handshake
+        await self.send_message(ws, "HANDSHAKE_ACK", {
+            "peer_id": self.my_id,
+            "uri": self.my_uri
+        })
+    
     async def _handle_getting_chain(self, ws):
 
         response = {
@@ -115,23 +165,13 @@ class Peer:
 
         await ws.send(json.dumps(response, indent=4))
 
-
     async def _handle_handshake_ack(self, data):
         """Obrađuje HANDSHAKE_ACK poruke"""
         peer_id = data.get("peer_id")
         peer_uri = data.get("uri")
         print(f"🤝 [RECV] Peer {self.my_id}: HANDSHAKE_ACK from {peer_id} ({peer_uri})")
         self.known_peers[peer_id] = {"uri": peer_uri, "id": peer_id}
-    
-    async def _handle_ping(self, ws, sender_id):
-        """Obrađuje PING poruke"""
-        print(f"📶 [RECV] Peer {self.my_id}: PING from {sender_id}")
-        await self.send_message(ws, "PONG", {})
-    
-    async def _handle_pong(self, sender_id):
-        """Obrađuje PONG poruke"""
-        print(f"✅ [RECV] Peer {self.my_id}: PONG from {sender_id}")
-    
+
     async def _handle_new_block(self, sender_id, data):
         """Obrađuje NEW_BLOCK poruke"""
         print(f"[RECV] NEW_BLOCK from {sender_id}: {data}")
@@ -147,6 +187,34 @@ class Peer:
                 peer_id != self.my_id):
                 asyncio.create_task(self.connect_to_peer(peer_uri))
     
+    def get_network_size(self):
+        """Vraća broj aktivnih peer-ova u mreži"""
+        return len(self.known_peers) + 1  # +1 for self
+    
+    def calculate_required_votes(self):
+        """Izračunava potreban broj glasova za konsenzus"""
+        network_size = self.get_network_size()
+        return int(network_size * self.consensus_threshold) + 1
+
+    def _check_transaction_consensus(self):
+        print("koncezus")
+        """
+        votes = self.transaction_votes[tx_id]
+        required_votes = self.calculate_required_votes()
+        
+        positive_votes = sum(1 for vote in votes.values() if vote)
+        negative_votes = sum(1 for vote in votes.values() if not vote)
+        
+        print(f"📊 Transaction {tx_id}: +{positive_votes} -{negative_votes} (need {required_votes})")
+        
+        if positive_votes >= required_votes:
+            print(f"✅ Transaction {tx_id} ACCEPTED by consensus")
+            await self._start_mining_phase(tx_id)
+        elif negative_votes >= required_votes:
+            print(f"❌ Transaction {tx_id} REJECTED by consensus")
+            await self._cleanup_transaction(tx_id)
+            """
+
     async def start_server(self):
         """Pokretanje peer servera"""
         async def handler(ws):
@@ -190,8 +258,6 @@ class Peer:
                 peer_list.append({"uri": self.my_uri, "id": self.my_id})  # dodaj sebe
                 await self.send_message(ws, "PEERS", peer_list)
                 
-                await self.send_message(ws, "NEW_BLOCK", {"block": f"Genesis from {self.my_id}"})
-
                 async for message in ws:
                     await self.handle_message(ws, message)
 
@@ -216,7 +282,7 @@ class Peer:
         for uri, ws in self.outgoing_peers.copy().items():
             try:
                 await self.send_message(ws, msg_type, data)
-                print(f"[SENT] {msg_type} from {self.my_id} to {uri}")
+                print(f"👥 [SENT] Peer {self.my_id}: {msg_type} from {self.my_id} to {uri}")
             except Exception as e:
                 print(f"[ERROR] Failed to send to {uri}: {e}")
                 disconnected_peers.append(uri)
@@ -226,13 +292,21 @@ class Peer:
             if uri in self.outgoing_peers:
                 del self.outgoing_peers[uri]
     
-    async def user_input_loop(self):
+    async def update_loop(self):
         """Loop za korisnikov input"""
         loop = asyncio.get_event_loop()
         while True:
+            print(self.transaction_votes)
+            if self.is_transaction_validation and self.get_network_size() == len(self.transaction_votes):
+                self._check_transaction_consensus()
+                
+
+            # ovo sluzi za testiranje 
             await loop.run_in_executor(None, input, 
                 f"[Peer {self.my_id}] Press ENTER to broadcast NEW_BLOCK. Connected peers: {list(self.outgoing_peers.keys())}\n")
+            """
             await self.broadcast("NEW_BLOCK", {"block": f"Manual block from {self.my_id}"})
+            """
     
     async def run(self, initial_peers=None):
         """Glavna metoda za pokretanje peer-a"""
@@ -246,7 +320,7 @@ class Peer:
                     asyncio.create_task(self.connect_to_peer(peer_uri))
 
         # Pokreni user input loop
-        asyncio.create_task(self.user_input_loop())
+        asyncio.create_task(self.update_loop())
 
         # Beskonačan loop
         while True:
