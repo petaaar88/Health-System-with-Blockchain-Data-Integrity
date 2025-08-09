@@ -29,4 +29,18 @@ class BlockHeader:
             "miner": self.miner,
             "block_hash": self.block_hash
         }
-   
+    
+    @staticmethod
+    def from_dict(data):
+        block = BlockHeader(
+            height=data["height"],
+            difficulty=data["difficulty"],
+            miner=data["miner"],
+            previous_block_hash=data.get("previous_block_hash")
+        )
+        block.id = data["id"]
+        block.merkle_root = data["merkle_root"]
+        block.timestamp = datetime.fromisoformat(data["timestamp"])
+        block.nonce = data["nonce"]
+        block.block_hash = data["block_hash"]
+        return block

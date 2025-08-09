@@ -22,14 +22,15 @@ class Block:
             str(self.transaction)
         )
 
-    def mine(self):
+    def mine(self, chain):
         print(f"\n⛏️  #{self.header.height} Block Minning...")
-        while not self.header.block_hash.startswith("0" * self.header.difficulty):
+        while not self.header.block_hash.startswith("0" * self.header.difficulty) and chain.can_mine is True:
             self.header.nonce+=1
             self.header.block_hash = self.get_hash()
 
-        print(f"\n✔️  #{self.header.height} Blok successfully mined by {self.header.miner}.\n") #TODO ovde ide majner iz bloka koji je izmajnovao
-        print(self)
+        if chain.can_mine:
+            print(f"\n✔️  #{self.header.height} Blok successfully mined by {self.header.miner}.\n") #TODO ovde ide majner iz bloka koji je izmajnovao
+            print(self)
 
     @staticmethod
     def is_valid(block:Block, chain):
@@ -70,5 +71,11 @@ class Block:
             "header": self.header.to_dict() if hasattr(self.header, "to_dict") else None,
             "transaction": self.transaction.to_dict()  if hasattr(self.transaction, "to_dict") else None
         }
+    
+    @staticmethod
+    def from_dict(block_dict):
+        block = Block(BlockHeader.from_dict(block_dict["header"]),Transaction.from_dict(block_dict["transaction"]))
+        block.header.merkle_root = BlockHeader.from_dict(block_dict["header"]).merkle_root
+        return block
 
         
