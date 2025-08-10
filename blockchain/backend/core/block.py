@@ -1,4 +1,5 @@
 from __future__ import annotations
+from datetime import datetime
 from blockchain.backend.util import util
 from blockchain.backend.core.transaction import Transaction
 from blockchain.backend.core.block_header import BlockHeader
@@ -14,7 +15,6 @@ class Block:
             str(self.header.id) +
             (self.header.previous_block_hash or "") +
             (self.header.merkle_root or "") +
-            str(self.header.timestamp) +
             str(self.header.height) +
             str(self.header.difficulty) +
             str(self.header.nonce) +
@@ -28,9 +28,12 @@ class Block:
             self.header.nonce+=1
             self.header.block_hash = self.get_hash()
 
+        self.header.timestamp = datetime.now() #timestamp trenutnog bloka
+
         if chain.can_mine:
-            print(f"\n✔️  #{self.header.height} Blok successfully mined by {self.header.miner}.\n") #TODO ovde ide majner iz bloka koji je izmajnovao
-            print(self)
+            print(f"\n✔️  #{self.header.height} Blok successfully mined by {self.header.miner} at {self.header.timestamp}.\n") #TODO ovde ide majner iz bloka koji je izmajnovao
+            print("Header of new block:")
+            print(self.header)
 
     @staticmethod
     def is_valid(block:Block, chain):

@@ -19,6 +19,8 @@ class Chain:
     def create_genesis_block(self):
         genesis_block = Block(BlockHeader(0,self.difficulty,None,None),None)
         genesis_block.miner = None
+        genesis_block.header.id = "1"
+        genesis_block.header.timestamp = ""
         genesis_block.header.block_hash = genesis_block.get_hash()
 
         return genesis_block

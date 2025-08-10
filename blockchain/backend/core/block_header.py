@@ -8,7 +8,7 @@ class BlockHeader:
         self.id = uuid.uuid4().hex
         self.previous_block_hash = previous_block_hash
         self.merkle_root = '' # root merkle tree-a(hash tree), koje nastaje tako sto je svaki leaf transkacija iz bloka
-        self.timestamp = datetime.now() #timestamp trenutnog bloka
+        self.timestamp = "" #timestamp trenutnog bloka
         self.difficulty = difficulty #target difficulty
         self.nonce = 0
         self.miner = miner
