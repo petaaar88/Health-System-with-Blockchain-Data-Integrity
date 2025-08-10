@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 import uuid
 import threading
+from collections import deque
 from blockchain.backend.util import util
 from blockchain.backend.core.chain import Chain
 from blockchain.backend.core.transaction import Transaction
@@ -23,6 +24,12 @@ class Peer:
 
         self.consensus_threshold = 0.51  # 51% konsenzus
 
+        # NOVO: Pending transactions mechanism
+        self.pending_transactions = deque()  # Queue of pending transactions
+        self.current_transaction = None      # Currently processing transaction
+        self.is_processing_transaction = False  # Flag to track if we're processing
+        self.pending_lock = asyncio.Lock()   # Thread safety for pending queue
+
         # transaction validation consensus
         self.is_transaction_validation = False
         self.transaction_votes = []
@@ -36,6 +43,64 @@ class Peer:
         self.received_blocks = {}  # {timestamp: block} - čuva sve primljene blokove
         self.consensus_finalized = False  # da li je konsenzus završen
         self.block_processing_timeout = 2.0  # sekunde za čekanje svih blokova
+
+    async def add_pending_transaction(self, transaction_data):
+        """Dodaje transakciju u pending queue ili je odmah obrađuje"""
+        async with self.pending_lock:
+            # Ako ne obrađujemo ništa trenutno, obradi odmah
+            if not self.is_processing_transaction:
+                self.current_transaction = transaction_data
+                self.is_processing_transaction = True
+                print(f"⚡ [IMMEDIATE] Peer {self.my_id}: Processing transaction immediately")
+                
+                # Obradi odmah bez dodavanja u queue
+                await self._handle_add_transaction(transaction_data)
+            else:
+                # Dodaj u queue ako već obrađujemo nešto
+                self.pending_transactions.append(transaction_data)
+                print(f"📝 [QUEUE] Peer {self.my_id}: Added transaction to pending queue. Queue size: {len(self.pending_transactions)}")
+
+    async def process_next_transaction(self):
+        """Obrađuje sledeću transakciju iz queue-a"""
+        async with self.pending_lock:
+            if not self.pending_transactions:
+                return
+            
+            # Uzmi sledeću transakciju iz queue-a
+            self.current_transaction = self.pending_transactions.popleft()
+            self.is_processing_transaction = True
+            
+        print(f"⚡ [PROCESSING] Peer {self.my_id}: Started processing next transaction from queue. Remaining: {len(self.pending_transactions)}")
+        
+        # Pokreni validation process
+        await self._handle_add_transaction(self.current_transaction)
+
+    async def transaction_completed(self):
+        """Poziva se kada je transakcija potpuno završena (blok dodat u lanac)"""
+        async with self.pending_lock:
+            self.current_transaction = None
+            self.is_processing_transaction = False
+            
+        print(f"✅ [COMPLETED] Peer {self.my_id}: Transaction processing completed")
+        
+        # NOVO: Resetuj mining stanje kompletno
+        self.chain.can_mine = True
+        self.chain.is_mining = False
+        self.consensus_finalized = False
+        self.received_blocks.clear()
+        
+        # Pokreni obradu sledeće transakcije ako postoji
+        if self.pending_transactions:
+            print(f"🔄 [QUEUE] Peer {self.my_id}: Processing next transaction from queue")
+            await self.process_next_transaction()
+
+    def get_pending_queue_status(self):
+        """Vraća status pending queue-a"""
+        return {
+            "queue_size": len(self.pending_transactions),
+            "is_processing": self.is_processing_transaction,
+            "current_transaction_id": Transaction.from_dict(self.current_transaction.get("transaction")).id if self.current_transaction else None
+        }
 
     async def send_message(self, ws, msg_type, data):
         """Šalje poruku preko websocket konekcije"""
@@ -72,10 +137,14 @@ class Peer:
 
             # CLIENT messages
             elif msg_type == "CLIENT_ADD_TRANSACTION":
-                await self._handle_add_transaction(data)
+                # NOVO: Umesto direktne obrade, dodaj u pending queue
+                await self.add_pending_transaction(data)
 
             elif msg_type == "CLIENT_GET_CHAIN":
                 await self._handle_getting_chain(ws)
+
+            elif msg_type == "CLIENT_GET_QUEUE_STATUS":
+                await self._handle_get_queue_status(ws)
 
             # Transaction messages
             elif msg_type == "VERIFY_TRANSACTION":
@@ -97,6 +166,11 @@ class Peer:
 
         except Exception as e:
             print(f"[ERROR] handle_message: {e}")
+
+    async def _handle_get_queue_status(self, ws):
+        """Šalje status pending queue-a klijentu"""
+        status = self.get_pending_queue_status()
+        await ws.send(json.dumps(status, indent=2))
 
     async def _handle_add_transaction(self, data):
         """Klijent doda transakciju — pokrećemo validation gossip"""
@@ -132,7 +206,7 @@ class Peer:
 
     async def _handle_verify_transaction(self, data):
         # Kada primimo VERIFY_TRANSACTION, uverimo se da resetujemo stanje ako nije aktivno
-        print(f"🔍 [RECV {util.get_current_time_precise()}]  Peer {self.my_id}: Transaction for validation {Transaction.from_dict(data.get("transaction")).id}")
+        print(f"🔍 [RECV {util.get_current_time_precise()}]  Peer {self.my_id}: Transaction for validation {Transaction.from_dict(data.get('transaction')).id}")
 
         
         self.is_transaction_validation = True
@@ -229,6 +303,11 @@ class Peer:
                     #self.chain.add_to_block_to_chain(self.mined_block)
                     #print(f"✅ Finalni blok dodat u lanac: {winning_timestamp}")
                     print("validan je")
+                    
+                    # NOVO: Završi transakciju samo ako je ovo node koji je kopao blok
+                    if winning_sender == self.my_id and self.is_processing_transaction:
+                        print(f"🎯 [MINE SUCCESS] Peer {self.my_id}: My block won consensus!")
+                        asyncio.create_task(self.transaction_completed())
             except Exception as e:
                 print(f"[ERROR] Pri dodavanju finalnog bloka u lokalni lanac: {e}")
 
@@ -261,6 +340,9 @@ class Peer:
                     if Block.is_valid(self.mined_block, self.chain):
                         self.chain.add_to_block_to_chain(self.mined_block)
                         print(f"✅ Finalni blok dodat u lokalni lanac:")
+                        
+                        # NOVO: Pokreni sledeću transakciju kada se blok doda u lanac
+                        asyncio.create_task(self.transaction_completed())
             except Exception as e:
                 print(f"[ERROR] Pri dodavanju finalnog bloka u lokalni lanac: {e}")
 
@@ -273,6 +355,9 @@ class Peer:
             self.transaction_votes = []
 
             print(f"✅ SVI NODOVI: Finalni blok postavljen - {self.mined_block.header if self.mined_block else 'none'}")
+            
+            # UKLANJAMO - transaction_completed() se poziva gore kada se blok stvarno doda
+            # await self.transaction_completed()
 
     async def _handle_mine(self, ws, data):
 
@@ -364,11 +449,19 @@ class Peer:
             print(f"👥✅ Transaction  ACCEPTED by consensus")
             # Pokreni rudarenje u odvojenom thread-u
             print(f"\n⛏️ [INFO] Peer {self.my_id}: Mining started at {util.get_current_time_precise()}")
+            
+            # NOVO: Resetuj mining stanje pre početka
+            self.chain.can_mine = True
+            self.chain.is_mining = True
+            self.consensus_finalized = False
+            
             mining_thread = threading.Thread(target=self.chain.create_new_block, daemon=True)
             mining_thread.start()
 
         else:
             print(f"👥❌ Transaction  REJECTED by consensus")
+            # NOVO: Ako je transakcija odbijena, završi trenutnu i pokreni sledeću
+            asyncio.create_task(self.transaction_completed())
 
         self.is_transaction_validation = False
         self.transaction_votes = []
@@ -493,6 +586,7 @@ class Peer:
         """Glavna metoda za pokretanje peer-a"""
         await self.start_server()
         print(f"🚀 PEER {self.my_id} started on {self.my_uri}\n")
+        print(f"📝 Pending transactions queue initialized")
 
         # Poveži se na početne peer-ove
         if initial_peers:
