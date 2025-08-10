@@ -1,6 +1,7 @@
 import asyncio
 import websockets
 import json
+from  datetime import datetime
 import uuid
 import threading
 from blockchain.backend.core.chain import Chain
@@ -25,6 +26,11 @@ class Peer:
         #transaction validatoin concensus
         self.is_transaction_validation = False
         self.transaction_votes = []
+
+        #block validation consensus
+        self.block_votes = []
+        self.mined_block = None
+
     
     async def send_message(self, ws, msg_type, data):
         """Šalje poruku preko websocket konekcije"""
@@ -71,9 +77,9 @@ class Peer:
             elif msg_type == "TRANSACTION_VOTE":
                 await self._handle_transactin_vote(data)
 
-            #TODO obrisi jer je samo pokazna metoda koja pokazuje kako radi blockchain kada mu se sa strane posalju podaci
-            elif msg_type == "MINE":
-                await self._handle_mine(ws, data)
+            # Block messages
+            elif msg_type == "VERIFY_BLOCK":
+                await self._handle_verify_block(data)
 
             else:
                 print(f"[WARN] Unknown message type: {msg_type}")
@@ -116,6 +122,36 @@ class Peer:
 
     async def _handle_transactin_vote(self,data):
         self.transaction_votes.append(data)
+
+
+    async def _handle_verify_block(self, data):
+        self.chain.can_mine = False # mora ovde da bude 
+        self.chain.is_mining = False
+        print("vreme:     "+ data.get("header").get("timestamp"))
+        temp_block = Block.from_dict(data)
+        
+        print("ovo je najjacee    " + temp_block.header.miner)
+        if(self.chain.mined_block is not None):
+            timestamp1 = self.chain.mined_block.header.timestamp  # npr. "2025-08-09 19:00:00"
+            timestamp2 = temp_block.header.timestamp      # npr. "2025-08-09 20:00:00"
+
+            # Pretvaramo stringove u datetime objekte
+            if timestamp1 >= timestamp2:
+                print("drugi node je brze iskopap")
+                self.chain.mined_block = None
+                self.mined_block = temp_block # UNSURE mozda dovede do cracha ukoliko se izbrise
+                #ako su jednaki stavi da se odluzuje random koji ce da udje
+            
+        else:
+            self.mined_block = temp_block
+
+        
+        #self.chain.can_mine = True
+
+        #Ako je nevalidan
+        #self.chain.is_mining = True
+        #AKO JE VALIDAN BLOK URADI OVO
+
 
     #TODO obrisi jer je samo pokazna metoda koja pokazuje kako radi blockchain kada mu se sa strane posalju podaci
     async def _handle_mine(self,ws, data):
@@ -218,6 +254,7 @@ class Peer:
             print(f"👥❌ Transaction  REJECTED by consensus")
         
         self.is_transaction_validation = False
+        self.transaction_votes = []
     
 
     async def start_server(self):
@@ -301,9 +338,18 @@ class Peer:
         """Loop za korisnikov input"""
         loop = asyncio.get_event_loop()
         while True:
+
             if self.is_transaction_validation and self.get_network_size() == len(self.transaction_votes):
                 self._check_transaction_consensus()
                 
+            if self.chain.is_mining:
+                if self.chain.mined_block is not None: # TODO ovde stavi uslov da bude ako vec proverava blok, da ovaj saceka
+                    self.chain.is_mining = False
+                    self.mined_block = self.chain.mined_block
+                    await self.broadcast("VERIFY_BLOCK", self.chain.mined_block.to_dict())
+
+            if(self.mined_block is not None):
+                print(self.mined_block.header)
 
             await asyncio.sleep(0.1)  # mala pauza da se event loop oslobodi
     
