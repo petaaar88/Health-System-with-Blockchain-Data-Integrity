@@ -1,4 +1,5 @@
 import json
+import datetime
 from Crypto.PublicKey import RSA
 from Crypto.Hash import SHA256
 from Crypto.Signature import pss
@@ -108,3 +109,17 @@ def object_to_canonical_bytes_json(obj):
 
 def get_raw_key(key:str):
     return RSA.import_key(bytes.fromhex(key))
+
+def get_current_time_precise():
+    trenutno_vreme = datetime.datetime.now()
+
+    sati = trenutno_vreme.hour
+    minuti = trenutno_vreme.minute
+    sekunde = trenutno_vreme.second
+    # Mikrosekunde su sada prikazane direktno
+    mikrosekunde = trenutno_vreme.microsecond
+
+    # Formiranje f-stringa sa svim delovima vremena
+    # Sati, minuti i sekunde dobijaju vodeću nulu ako su manji od 10 (npr. '05')
+    # Mikrosekunde se prikazuju sa 6 cifara, popunjene vodećim nulama
+    return f"{sati:02d}:{minuti:02d}:{sekunde:02d}.{mikrosekunde:06d}"
