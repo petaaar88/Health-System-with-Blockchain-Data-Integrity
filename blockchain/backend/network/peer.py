@@ -16,6 +16,8 @@ class Peer:
         self.my_uri = f"ws://localhost:{port}"
         self.my_id = str(uuid.uuid4())[:8]
         self.chain = Chain(self.my_id)
+        #self.chain.load_chain_from_file(port) TODO odkomentarisi kada ga popravis
+        self.chain.port = self.port
 
         # Razdvojimo incoming i outgoing konekcije
         self.incoming_peers = {}    # {ws: peer_info}

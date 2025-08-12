@@ -77,7 +77,12 @@ class Block:
     
     @staticmethod
     def from_dict(block_dict):
-        block = Block(BlockHeader.from_dict(block_dict["header"]),Transaction.from_dict(block_dict["transaction"]))
+        tx = None
+        
+        if block_dict["transaction"] != None:
+            tx = Transaction.from_dict(block_dict["transaction"])
+
+        block = Block(BlockHeader.from_dict(block_dict["header"]),tx)
         block.header.merkle_root = BlockHeader.from_dict(block_dict["header"]).merkle_root
         return block
 

@@ -11,7 +11,7 @@ from datetime import datetime
 from blockchain.backend.util import util
 
 patient = Patient("Petar", "Djorjdevic")
-hospital = HealthAuthority("Dom Zdravlja")
+hospital = HealthAuthority("Dom Zdravlja","asdfasd","asdasfd",'asdfasd')
 medical_record = {
     "id":"asdfadsf00",
     "patient_id": "987654321",

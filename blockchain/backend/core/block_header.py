@@ -40,7 +40,7 @@ class BlockHeader:
         )
         block.id = data["id"]
         block.merkle_root = data["merkle_root"]
-        block.timestamp = datetime.fromisoformat(data["timestamp"])
+        block.timestamp =  datetime.fromisoformat(data["timestamp"]) if data.get("timestamp") else ""
         block.nonce = data["nonce"]
         block.block_hash = data["block_hash"]
         return block

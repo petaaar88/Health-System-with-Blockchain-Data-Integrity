@@ -10,7 +10,7 @@ from datetime import datetime
 
 
 patient = Patient("Petar", "Djorjdevic")
-hospital = HealthAuthority("Dom Zdravlja")
+hospital = HealthAuthority("Dom Zdravlja",'sadfasd',"asdfasd",'asdfasfd')
 medical_record = {
     "id":"asdfadsf00",
     "patient_id": "987654321",

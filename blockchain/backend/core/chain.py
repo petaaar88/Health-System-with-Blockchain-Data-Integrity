@@ -1,7 +1,9 @@
 from __future__ import annotations
+import os
 from blockchain.backend.core.block import Block
 from blockchain.backend.core.block_header import BlockHeader
 from blockchain.backend.core.transaction import Transaction
+from blockchain.backend.util import util
 
 class Chain:
     def __init__(self, miner, initial_time_to_mine = 30000, initial_difficulty = 5):
@@ -46,6 +48,12 @@ class Chain:
     def add_to_block_to_chain(self, block: Block):
         
         self.chain.append(block)
+        path = f"./blockchain/db/{str(self.port)}_chain.json"
+        chain_dict  = []
+        for block in self.chain:
+            chain_dict.append(block.to_dict())
+        print("uso je ovde")
+        util.write_to_json_file(path,chain_dict)
 
         self.tx = None
         self.medical_record = None
@@ -59,6 +67,21 @@ class Chain:
 
         return True
          
+    def load_chain_from_file(self,port):
+        path = f"./blockchain/db/{str(port)}_chain.json"
+        if os.path.exists(path):
+            chain_dict = util.read_from_json_file(path)
+            if(len(chain_dict) == 0):
+                util.write_to_json_file(path,[self.chain[0].to_dict()])
+                return 
+            
+            for block in chain_dict:
+                self.chain.append(Block.from_dict(block))
+
+            print("Chain loaded from file")
+        else:
+            util.write_to_json_file(path,[self.chain[0].to_dict()])
+
     @staticmethod
     def is_valid(chain: Chain):
         for i in range(1, len(chain.chain)):
