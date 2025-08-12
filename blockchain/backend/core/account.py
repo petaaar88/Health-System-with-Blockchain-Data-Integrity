@@ -9,7 +9,7 @@ class Account:
         self.private_key = _private_key.export_key(format='DER').hex()
         self.public_key = _private_key.public_key().export_key(format='DER').hex()
 
-        self._add_new_account_to_db()
+        self._add_new_account_to_db() # TODO ovo mora u blokchain da se doda i svaka baza za svaki node da pocinej sa brojem njegovog id-a
 
     def get_raw_public_key(self):
         return RSA.import_key(bytes.fromhex(self.public_key))
@@ -23,9 +23,7 @@ class Account:
         transaction.signature = signature
         
         return signature
-    
-    def send_transaction(self, transaction: Transaction, signature):
-        print("Salje se")
+
 
     def _add_new_account_to_db(self):
         account_data = {
