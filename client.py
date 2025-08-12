@@ -1,8 +1,8 @@
 import asyncio
 import websockets
 import json
-from backend.patient import Patient
-from backend.hospital_entity import HospitalEntity
+from backend.entities.patient import Patient
+from backend.entities.health_authority import HealthAuthority
 from blockchain.backend.core.transaction import Transaction
 from blockchain.backend.core.transaction_body import TransactionBody
 from blockchain.backend.core.chain import Chain
@@ -11,7 +11,7 @@ from datetime import datetime
 from blockchain.backend.util import util
 
 patient = Patient("Petar", "Djorjdevic")
-hospital = HospitalEntity("Dom Zdravlja")
+hospital = HealthAuthority("Dom Zdravlja")
 medical_record = {
     "id":"asdfadsf00",
     "patient_id": "987654321",
@@ -44,7 +44,7 @@ async def ws_client():
 
         # Primer slanja poruke serveru
         await websocket.send(json.dumps({
-                                        "type": "MINE",
+                                        "type": "CLIENT_ADD_TRANSACTION",
                                          "data":{
                                              "transaction":transaction_dict,
                                              "data_for_validation":medical_record

@@ -1,7 +1,7 @@
 from blockchain.backend.util import util
 
-from backend.patient import Patient
-from backend.hospital_entity import HospitalEntity
+from backend.entities.patient import Patient
+from backend.entities.health_authority import HealthAuthority
 from blockchain.backend.core.transaction import Transaction
 from blockchain.backend.core.transaction_body import TransactionBody
 from blockchain.backend.core.chain import Chain
@@ -10,7 +10,7 @@ from datetime import datetime
 
 
 patient = Patient("Petar", "Djorjdevic")
-hospital = HospitalEntity("Dom Zdravlja")
+hospital = HealthAuthority("Dom Zdravlja")
 medical_record = {
     "id":"asdfadsf00",
     "patient_id": "987654321",
