@@ -113,19 +113,49 @@ def add_health_authority():
     collection = db["health_authorities"]
     data = request.json
     
+    try:
+        # Kreiraj HealthAuthority objekat
+        new_health_authority = HealthAuthority(
+            name=data.get("name"),
+            type=data.get("type"),
+            address=data.get("address"),
+            phone=data.get("phone")
+        )
 
-    # Kreiraj HealthAuthority objekat
-    ha = HealthAuthority(
-        name=data.get("name"),
-        type=data.get("type"),
-        address=data.get("address"),
-        phone=data.get("phone")
-    )
+        # Ubaci u bazu kao dict
+        result = collection.insert_one(new_health_authority.to_dict())
+        if result.inserted_id:
+            # Slanje na blockchain - nova konekcija za ovaj request
+            new_account = {
+                "public_key": new_health_authority.public_key,
+                "private_key": new_health_authority.private_key
+            }
 
-    # Ubaci u bazu kao dict
-    collection.insert_one(ha.to_dict())
+            message = {
+                "type": "CLIENT_ADD_ACCOUNT",
+                "data": new_account
+            }
 
-    return jsonify({"message": "HealthAuthority successfully added", "id": ha._id}), 201
+            blockchain_success, blockchain_response = send_to_blockchain_per_request(new_account, message)
+            
+            response_data = {
+                "message": "Health Authority successfully added", 
+                "id": str(result.inserted_id)
+            }
+            
+            response =  json.loads(blockchain_response)
+            if blockchain_success:
+                response_data["blockchain_response"] = response["message"]
+            else:
+                response_data["blockchain_error"] = response
+            
+            return jsonify(response_data), 201
+        else:
+            return jsonify({"error": "Failed to insert patient"}), 500
+
+    except Exception as e:
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+
 
 @app.route("/api/doctors", methods = ["POST"])
 def add_doctor():

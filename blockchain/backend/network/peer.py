@@ -190,7 +190,7 @@ class Peer:
         }
 
         Account._add_new_account_to_db(new_account,self.port)
-        await ws.send(json.dumps({"message":"Patient added!"}))
+        await ws.send(json.dumps({"message":"Account added!"}))
         await self.broadcast("ADD_ACCOUNT",new_account)
     
     async def _handle_add_account(self, data):
