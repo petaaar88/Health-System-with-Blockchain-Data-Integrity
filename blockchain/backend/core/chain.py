@@ -52,7 +52,7 @@ class Chain:
         chain_dict  = []
         for block in self.chain:
             chain_dict.append(block.to_dict())
-        print("uso je ovde")
+        
         util.write_to_json_file(path,chain_dict)
 
         self.tx = None
@@ -84,6 +84,10 @@ class Chain:
         else:
             util.write_to_json_file(path,[self.chain[0].to_dict()])
 
+    def chech_accounts_db(self,port):
+        path = f"./blockchain/db/{str(port)}_accounts.json"
+        if os.path.exists(path) is False:
+            util.write_to_json_file(path,[])
 
     def chain_from_dict(self,chain_dict:dict[str,any]):
         path = f"./blockchain/db/{str(self.port)}_chain.json"

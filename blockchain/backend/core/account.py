@@ -1,3 +1,4 @@
+import os
 from Crypto.PublicKey import RSA
 from blockchain.backend.core.transaction import Transaction
 from blockchain.backend.util import util
@@ -9,7 +10,6 @@ class Account:
         self.private_key = _private_key.export_key(format='DER').hex()
         self.public_key = _private_key.public_key().export_key(format='DER').hex()
 
-        self._add_new_account_to_db() # TODO ovo mora u blokchain da se doda i svaka baza za svaki node da pocinej sa brojem njegovog id-a
 
     def get_raw_public_key(self):
         return RSA.import_key(bytes.fromhex(self.public_key))
@@ -24,18 +24,16 @@ class Account:
         
         return signature
 
-
-    def _add_new_account_to_db(self):
-        account_data = {
-            "public_key" : self.public_key,
-            "private_key":self.private_key
-        }
-
-        accounts = util.read_from_json_file("./blockchain/db/accounts.json")
-        if isinstance(accounts,list) is False:
-            accounts = []
+    @staticmethod
+    def _add_new_account_to_db(new_account,port):
+        path = f"./blockchain/db/{port}_accounts.json"
+        accounts = []
+        if os.path.exists(path):
+            accounts = util.read_from_json_file(path)
+            if isinstance(accounts,list) is False:
+                accounts = []
         
-        accounts.append(account_data)
-        util.write_to_json_file("./blockchain/db/accounts.json",accounts)
+        accounts.append(new_account)
+        util.write_to_json_file(path,accounts)
 
 

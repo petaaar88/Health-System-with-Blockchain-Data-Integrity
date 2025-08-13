@@ -9,6 +9,7 @@ from blockchain.backend.util import util
 from blockchain.backend.core.chain import Chain
 from blockchain.backend.core.transaction import Transaction
 from blockchain.backend.core.block import Block
+from blockchain.backend.core.account import Account
 
 class Peer:
     def __init__(self, port=8765):
@@ -18,6 +19,7 @@ class Peer:
         self.chain = Chain(self.my_id)
         self.chain.load_chain_from_file(port)
         self.chain.port = self.port
+        self.chain.chech_accounts_db(self.port)
 
         # Razdvojimo incoming i outgoing konekcije
         self.incoming_peers = {}    # {ws: peer_info}
@@ -137,22 +139,25 @@ class Peer:
             elif msg_type == "PEERS":
                 await self._handle_peers_list(sender_id, data)
             
-            elif msg_type == "GET_CHAIN":
-                await self._handle_get_chain(ws)
+            elif msg_type == "GET_DATA":
+                await self._handle_get_data(ws)
 
-            elif msg_type == "RECEIVE_CHAIN":
-                await self._handle_receive_chain(data)
+            elif msg_type == "RECEIVE_DATA":
+                await self._handle_receive_data(data)
+
+            elif msg_type == "ADD_ACCOUNT":
+                await self._handle_add_account(data)
 
             # CLIENT messages
 
             elif msg_type == "CLIENT_ADD_ACCOUNT":
-                await self._handle_add_account(data)
+                await self._handle_client_add_account(data)
 
             elif msg_type == "CLIENT_ADD_TRANSACTION":
                 await self.add_pending_transaction(data)
 
             elif msg_type == "CLIENT_GET_CHAIN":
-                await self._handle_getting_chain(ws)
+                await self._handle_client_get_chain(ws)
 
             elif msg_type == "CLIENT_GET_QUEUE_STATUS":
                 await self._handle_get_queue_status(ws)
@@ -178,14 +183,23 @@ class Peer:
         except Exception as e:
             print(f"[ERROR] handle_message: {e}")
 
-    async def _handle_add_account(self, data):
-         print() #TODO zavrsi metodu
+    async def _handle_client_add_account(self, data):
+        new_account = {
+            "public_key": data["public_key"],
+            "private_key": data["private_key"]  
+        }
 
-    async def load_chain_from_peer(self, uri):
+        Account._add_new_account_to_db(new_account,self.port)
+        await self.broadcast("ADD_ACCOUNT",new_account)
+    
+    async def _handle_add_account(self, data):
+        Account._add_new_account_to_db(data,self.port)
+
+    async def load_data_from_peer(self, uri):
         ws = await websockets.connect(uri)
         try:
             # Pošaljemo zahtev za chain
-            await self.send_message(ws, "GET_CHAIN", {})
+            await self.send_message(ws, "GET_DATA", {})
             
             # Čekamo odgovor
             while True:
@@ -195,8 +209,8 @@ class Peer:
                 msg_type = data.get("type")
                 msg_data = data.get("data", {})
                 
-                if msg_type == "RECEIVE_CHAIN":
-                    await self._handle_receive_chain(msg_data)
+                if msg_type == "RECEIVE_DATA":
+                    await self._handle_receive_data(msg_data)
                     break  # Izlazimo iz petlje kada dobijemo chain
                     
         except Exception as e:
@@ -204,14 +218,16 @@ class Peer:
         finally:
             await ws.close()
 
-    async def _handle_get_chain(self, ws):
-        await self.send_message(ws, "RECEIVE_CHAIN",{"chain":self.chain.chain_to_dict()})
+    async def _handle_get_data(self, ws):
+        accounts = util.read_from_json_file(f"./blockchain/db/{self.port}_accounts.json")
+        await self.send_message(ws, "RECEIVE_DATA",{"chain":self.chain.chain_to_dict(),"accounts":accounts})
 
-    async def _handle_receive_chain(self, data):
+    async def _handle_receive_data(self, data):
     
         chain_dict = data["chain"]
         self.chain.chain_from_dict(chain_dict)
-        print(chain_dict)
+        util.write_to_json_file(f"./blockchain/db/{self.port}_accounts.json",data["accounts"])
+       
 
     async def _handle_get_queue_status(self, ws):
         """Šalje status pending queue-a klijentu"""
@@ -438,7 +454,7 @@ class Peer:
             "uri": self.my_uri
         })
 
-    async def _handle_getting_chain(self, ws):
+    async def _handle_client_get_chain(self, ws):
 
         response = {"chain": []}
         for block in self.chain.chain:
