@@ -254,12 +254,12 @@ class Peer:
 
     def verify_transaction(self, data):
         self.is_transaction_validation = True
-        medical_record = data.get("data_for_validation")
+        health_record = data.get("data_for_validation")
         transaction = Transaction.from_dict(data.get("transaction"))
 
         is_valid = False
 
-        if self.chain.add_transaction(transaction, medical_record):
+        if self.chain.add_transaction(transaction, health_record):
             print(f"\n✅ [INFO] Peer {self.my_id}: Transaction {transaction.id} is valid.")
             is_valid = True
         else:
@@ -425,10 +425,10 @@ class Peer:
 
     async def _handle_mine(self, ws, data):
 
-        medical_record = data.get("data_for_validation")
+        health_record = data.get("data_for_validation")
         transaction = Transaction.from_dict(data.get("transaction"))
 
-        if self.chain.add_transaction(transaction, medical_record) is True:
+        if self.chain.add_transaction(transaction, health_record) is True:
             new_block = self.chain.create_new_block()
 
         if Block.is_valid(new_block, self.chain) is True:

@@ -10,7 +10,7 @@ class Transaction:
         self.id = uuid.uuid4().hex
 
     @staticmethod
-    def is_valid(transaction: Transaction, peer_id ,medical_record):
+    def is_valid(transaction: Transaction, peer_id ,health_record):
         
         #Validacija transakcije
         #1. Provera da li postoje adrese u bazi
@@ -37,13 +37,13 @@ class Transaction:
 
         required_keys = ["id", "patient_id", "patient_name","doctor_name","doctor_id","hospital_name","hospital_id"]
 
-        if all(key in medical_record for key in required_keys) is False or transaction.body.location == None or transaction.body.date is None:
+        if all(key in health_record for key in required_keys) is False or transaction.body.location == None or transaction.body.date is None:
             print(f"❌ Transaction {transaction.id} is invalid!") 
             return False
 
         print(f"✅ Transaction {transaction.id} is valid.")
 
-        transaction.body.medical_record_hash = util.hash256(medical_record)
+        transaction.body.health_record_hash = util.hash256(health_record)
     
     def __str__(self):
         return f"{self.body}"

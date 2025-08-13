@@ -12,7 +12,7 @@ class Chain:
         self.miner = miner
         self.chain = [self.create_genesis_block()] 
         self.tx = None
-        self.medical_record = None
+        self.health_record = None
         self.mined_block = None
         self.is_mining = False
         self.can_mine = True
@@ -56,14 +56,14 @@ class Chain:
         util.write_to_json_file(path,chain_dict)
 
         self.tx = None
-        self.medical_record = None
+        self.health_record = None
         
-    def add_transaction(self, transaction:Transaction, medical_record):
-        if Transaction.is_valid(transaction, self.port,medical_record) is False:
+    def add_transaction(self, transaction:Transaction, health_record):
+        if Transaction.is_valid(transaction, self.port,health_record) is False:
             return False 
          
         self.tx = transaction
-        self.medical_record = medical_record
+        self.health_record = health_record
 
         return True
          
