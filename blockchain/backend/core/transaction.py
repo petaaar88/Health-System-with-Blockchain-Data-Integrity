@@ -10,7 +10,7 @@ class Transaction:
         self.id = uuid.uuid4().hex
 
     @staticmethod
-    def is_valid(transaction: Transaction, medical_record):
+    def is_valid(transaction: Transaction, peer_id ,medical_record):
         
         #Validacija transakcije
         #1. Provera da li postoje adrese u bazi
@@ -18,14 +18,13 @@ class Transaction:
         #3. Proveraa se da li zdravstveni zapis sadrzi obavezna polja i da li transakcija sadrzi sva obavezna polja
 
         print(f"🔍 Transaction {transaction.id} Validation: ")
-        accounts = util.read_from_json_file("./blockchain/db/accounts.json")
+        accounts = util.read_from_json_file(f"./blockchain/db/{peer_id}_accounts.json")
 
         if isinstance(accounts,list) is False:
             print("❌ Addresses are invalid!")
             return False
 
-        
-        if [a for a in accounts if a.get("public_key") == transaction.body.creator] is False or [a for a in accounts if a.get("public_key") == transaction.body.patient] is False:
+        if not [a for a in accounts if a.get("public_key") == transaction.body.creator] or not [a for a in accounts if a.get("public_key") == transaction.body.patient]: 
             print("❌ Addresse is invalid!")
             return False
 

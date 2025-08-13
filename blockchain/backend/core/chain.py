@@ -59,7 +59,7 @@ class Chain:
         self.medical_record = None
         
     def add_transaction(self, transaction:Transaction, medical_record):
-        if Transaction.is_valid(transaction, medical_record) is False:
+        if Transaction.is_valid(transaction, self.port,medical_record) is False:
             return False 
          
         self.tx = transaction

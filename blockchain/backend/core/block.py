@@ -50,7 +50,7 @@ class Block:
             print("❌ Invalid block - Invalid previous block hash!")
             return False
         
-        if Transaction.is_valid(block.transaction,chain.medical_record) is False:
+        if Transaction.is_valid(block.transaction,chain.port,chain.medical_record) is False:
             print("❌ Invalid block - invalid transaction!")
             return False
         
