@@ -75,12 +75,32 @@ class Chain:
                 util.write_to_json_file(path,[self.chain[0].to_dict()])
                 return 
             
+            self.chain = []
+
             for block in chain_dict:
                 self.chain.append(Block.from_dict(block))
 
             print("Chain loaded from file")
         else:
             util.write_to_json_file(path,[self.chain[0].to_dict()])
+
+
+    def chain_from_dict(self,chain_dict:dict[str,any]):
+        path = f"./blockchain/db/{str(self.port)}_chain.json"
+        self.chain = []
+
+        for block in chain_dict:
+            self.chain.append(Block.from_dict(block))
+
+        util.write_to_json_file(path,chain_dict)
+    
+
+    def chain_to_dict(self):
+        chain_dict = []
+        for block in self.chain:
+            chain_dict.append(block.to_dict())
+        
+        return chain_dict
 
     @staticmethod
     def is_valid(chain: Chain):

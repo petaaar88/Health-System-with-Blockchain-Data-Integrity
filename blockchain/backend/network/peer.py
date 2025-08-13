@@ -16,7 +16,7 @@ class Peer:
         self.my_uri = f"ws://localhost:{port}"
         self.my_id = str(uuid.uuid4())[:8]
         self.chain = Chain(self.my_id)
-        #self.chain.load_chain_from_file(port) TODO odkomentarisi kada ga popravis
+        self.chain.load_chain_from_file(port)
         self.chain.port = self.port
 
         # Razdvojimo incoming i outgoing konekcije
@@ -136,10 +136,19 @@ class Peer:
 
             elif msg_type == "PEERS":
                 await self._handle_peers_list(sender_id, data)
+            
+            elif msg_type == "GET_CHAIN":
+                await self._handle_get_chain(ws)
+
+            elif msg_type == "RECEIVE_CHAIN":
+                await self._handle_receive_chain(data)
 
             # CLIENT messages
+
+            elif msg_type == "CLIENT_ADD_ACCOUNT":
+                await self._handle_add_account(data)
+
             elif msg_type == "CLIENT_ADD_TRANSACTION":
-                # NOVO: Umesto direktne obrade, dodaj u pending queue
                 await self.add_pending_transaction(data)
 
             elif msg_type == "CLIENT_GET_CHAIN":
@@ -168,6 +177,41 @@ class Peer:
 
         except Exception as e:
             print(f"[ERROR] handle_message: {e}")
+
+    async def _handle_add_account(self, data):
+         print() #TODO zavrsi metodu
+
+    async def load_chain_from_peer(self, uri):
+        ws = await websockets.connect(uri)
+        try:
+            # Pošaljemo zahtev za chain
+            await self.send_message(ws, "GET_CHAIN", {})
+            
+            # Čekamo odgovor
+            while True:
+                message = await ws.recv()
+                data = json.loads(message)  # Pretpostavljam da koristite JSON
+                
+                msg_type = data.get("type")
+                msg_data = data.get("data", {})
+                
+                if msg_type == "RECEIVE_CHAIN":
+                    await self._handle_receive_chain(msg_data)
+                    break  # Izlazimo iz petlje kada dobijemo chain
+                    
+        except Exception as e:
+            print(f"Greška pri učitavanju chain-a: {e}")
+        finally:
+            await ws.close()
+
+    async def _handle_get_chain(self, ws):
+        await self.send_message(ws, "RECEIVE_CHAIN",{"chain":self.chain.chain_to_dict()})
+
+    async def _handle_receive_chain(self, data):
+    
+        chain_dict = data["chain"]
+        self.chain.chain_from_dict(chain_dict)
+        print(chain_dict)
 
     async def _handle_get_queue_status(self, ws):
         """Šalje status pending queue-a klijentu"""

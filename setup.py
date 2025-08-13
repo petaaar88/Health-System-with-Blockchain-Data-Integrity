@@ -10,6 +10,9 @@ async def main():
     # Pripremi listu početnih peer-ova
     initial_peers = []
     if len(sys.argv) > 2:
+        
+        await peer.load_chain_from_peer(f"ws://localhost:{sys.argv[2]}")
+
         for peer_arg in sys.argv[2:]:
             if peer_arg.isdigit():
                 uri = f"ws://localhost:{peer_arg}"
