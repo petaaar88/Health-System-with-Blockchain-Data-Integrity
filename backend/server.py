@@ -3,6 +3,8 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 import uuid
 import json
+import websocket
+import threading
 
 from flask import Flask, request, jsonify
 from pymongo import MongoClient
@@ -10,6 +12,23 @@ from entities.patient import Patient
 from entities.health_authority import HealthAuthority
 from entities.doctor import Doctor
 from util.util import generate_secret_key_b64, convert_secret_key_to_bytes, encrypt, decrypt
+from util.blockchain_connection import BlockchainConnection
+
+def send_to_blockchain_per_request(data, message):
+    """Kreira novu konekciju za svaki request"""
+    blockchain_conn = BlockchainConnection()
+    
+    # Uspostavi konekciju
+    if not blockchain_conn.connect():
+        return False, "Failed to connect to blockchain"
+        
+    try:
+        # Pošalji poruku i čekaj odgovor
+        success, response = blockchain_conn.send_message(message)
+        return success, response
+    finally:
+        # Uvek zatvori konekciju nakon request-a
+        blockchain_conn.disconnect()
 
 app = Flask(__name__)
 
@@ -20,7 +39,6 @@ db = client["cs203_project-health_system"]  # baza
 
 @app.route("/api/patients", methods=["POST"])
 def add_patient():
-
     collection = db["patients"]   
 
     try:
@@ -53,7 +71,31 @@ def add_patient():
         result = collection.insert_one(new_patient.to_dict())
         
         if result.inserted_id:
-            return jsonify({"message": "Patient successfully added", "id": str(result.inserted_id)}), 201
+            # Slanje na blockchain - nova konekcija za ovaj request
+            new_account = {
+                "public_key": new_patient.public_key,
+                "private_key": new_patient.private_key
+            }
+
+            message = {
+                "type": "CLIENT_ADD_ACCOUNT",
+                "data": new_account
+            }
+
+            blockchain_success, blockchain_response = send_to_blockchain_per_request(new_account, message)
+            
+            response_data = {
+                "message": "Patient successfully added", 
+                "id": str(result.inserted_id)
+            }
+            
+            response =  json.loads(blockchain_response)
+            if blockchain_success:
+                response_data["blockchain_response"] = response["message"]
+            else:
+                response_data["blockchain_error"] = response
+            
+            return jsonify(response_data), 201
         else:
             return jsonify({"error": "Failed to insert patient"}), 500
 

@@ -151,7 +151,7 @@ class Peer:
             # CLIENT messages
 
             elif msg_type == "CLIENT_ADD_ACCOUNT":
-                await self._handle_client_add_account(data)
+                await self._handle_client_add_account(ws,data)
 
             elif msg_type == "CLIENT_ADD_TRANSACTION":
                 await self.add_pending_transaction(data)
@@ -183,16 +183,18 @@ class Peer:
         except Exception as e:
             print(f"[ERROR] handle_message: {e}")
 
-    async def _handle_client_add_account(self, data):
+    async def _handle_client_add_account(self,ws, data):
         new_account = {
             "public_key": data["public_key"],
             "private_key": data["private_key"]  
         }
 
         Account._add_new_account_to_db(new_account,self.port)
+        await ws.send(json.dumps({"message":"Patient added!"}))
         await self.broadcast("ADD_ACCOUNT",new_account)
     
     async def _handle_add_account(self, data):
+        print(f"📋 [RECV {util.get_current_time_precise()}] Peer {self.my_id}: Add account")
         Account._add_new_account_to_db(data,self.port)
 
     async def load_data_from_peer(self, uri):
