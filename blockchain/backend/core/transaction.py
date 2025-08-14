@@ -41,9 +41,11 @@ class Transaction:
             print(f"❌ Transaction {transaction.id} is invalid!") 
             return False
 
-        print(f"✅ Transaction {transaction.id} is valid.")
+        if util.hash256(health_record) != transaction.body.health_record_hash:
+            print(f"❌ Transaction {transaction.id} is invalid!") 
+            return False
 
-        transaction.body.health_record_hash = util.hash256(health_record)
+        print(f"✅ Transaction {transaction.id} is valid.")
     
     def __str__(self):
         return f"{self.body}"

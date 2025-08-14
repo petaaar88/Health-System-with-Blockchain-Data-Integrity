@@ -48,19 +48,25 @@ class Peer:
         self.consensus_finalized = False  # da li je konsenzus završen
         self.block_processing_timeout = 2.0  # sekunde za čekanje svih blokova
 
-    async def add_pending_transaction(self, transaction_data):
+        self.client_transactions = {}
+
+    async def add_pending_transaction(self, transaction_data, client_ws=None):
         """Dodaje transakciju u pending queue ili je odmah obrađuje"""
+        
+        # Ako je prosleđen client_ws, sačuvaj konekciju
+        if client_ws:
+            transaction_id = Transaction.from_dict(transaction_data.get("transaction")).id
+            self.client_transactions[transaction_id] = client_ws
+            print(f"💾 [CLIENT] Saved client connection for transaction {transaction_id}")
+        
         async with self.pending_lock:
-            # Ako ne obrađujemo ništa trenutno, obradi odmah
             if not self.is_processing_transaction:
                 self.current_transaction = transaction_data
                 self.is_processing_transaction = True
                 print(f"⚡ [IMMEDIATE] Peer {self.my_id}: Processing transaction immediately")
                 
-                # Obradi odmah bez dodavanja u queue
                 await self._handle_add_transaction(transaction_data)
             else:
-                # Dodaj u queue ako već obrađujemo nešto
                 self.pending_transactions.append(transaction_data)
                 print(f"📝 [QUEUE] Peer {self.my_id}: Added transaction to pending queue. Queue size: {len(self.pending_transactions)}")
 
@@ -154,7 +160,7 @@ class Peer:
                 await self._handle_client_add_account(ws,data)
 
             elif msg_type == "CLIENT_ADD_TRANSACTION":
-                await self.add_pending_transaction(data)
+                await self.add_pending_transaction(data, ws)
 
             elif msg_type == "CLIENT_GET_CHAIN":
                 await self._handle_client_get_chain(ws)
@@ -196,6 +202,26 @@ class Peer:
     async def _handle_add_account(self, data):
         print(f"📋 [RECV {util.get_current_time_precise()}] Peer {self.my_id}: Add account")
         Account._add_new_account_to_db(data,self.port)
+
+    async def notify_client_transaction_result(self, transaction_id, success, message):
+        """Šalje rezultat transakcije klijentu"""
+        if transaction_id in self.client_transactions:
+            client_ws = self.client_transactions[transaction_id]
+            try:
+                response = {
+                    "type": "TRANSACTION_RESULT",
+                    "transaction_id": transaction_id,
+                    "success": success,
+                    "message": message,
+                    "timestamp": util.get_current_time_precise()
+                }
+                await client_ws.send(json.dumps(response))
+                print(f"📤 [CLIENT] Sent result to client for transaction {transaction_id}: {message}")
+            except Exception as e:
+                print(f"[ERROR] Failed to notify client for transaction {transaction_id}: {e}")
+            finally:
+                # Ukloni iz mape nakon slanja
+                del self.client_transactions[transaction_id]
 
     async def load_data_from_peer(self, uri):
         ws = await websockets.connect(uri)
@@ -258,7 +284,7 @@ class Peer:
         transaction = Transaction.from_dict(data.get("transaction"))
 
         is_valid = False
-
+        
         if self.chain.add_transaction(transaction, health_record):
             print(f"\n✅ [INFO] Peer {self.my_id}: Transaction {transaction.id} is valid.")
             is_valid = True
@@ -384,7 +410,7 @@ class Peer:
     async def _handle_final_block_consensus(self, data):
         async with self.block_consensus_lock:
             if self.consensus_finalized:
-                return  # već je postavljen finalni konsenzus
+                return
 
             winning_block = Block.from_dict(data.get("winning_block"))
             winning_sender = data.get("winning_sender")
@@ -394,23 +420,38 @@ class Peer:
             print(f"🏆 Primljen FINALNI KONSENZUS od {finalizer}:")
             print(f"   Ukupno blokova: {total_blocks}")
 
-            # SVI postavljaju isti finalni blok
             self.mined_block = winning_block
             self.consensus_finalized = True
 
-            # Dodaj finalni blok u lokalni lanac ako je validan
             try:
                 if self.chain.get_last_block().header.height != self.mined_block.header.height:
                     if Block.is_valid(self.mined_block, self.chain):
                         self.chain.add_to_block_to_chain(self.mined_block)
                         print(f"✅ Finalni blok dodat u lokalni lanac:")
                         
-                        # NOVO: Pokreni sledeću transakciju kada se blok doda u lanac
+                        # NOVO: Obavesti klijenta o uspešnom dodavanju u blockchain
+                        if self.current_transaction:
+                            current_transaction_id = Transaction.from_dict(self.current_transaction.get("transaction")).id
+                            asyncio.create_task(self.notify_client_transaction_result(
+                                current_transaction_id,
+                                True,
+                                f"Transaction successfully added to blockchain in block {winning_block.header.height}"
+                            ))
+                        
                         asyncio.create_task(self.transaction_completed())
             except Exception as e:
                 print(f"[ERROR] Pri dodavanju finalnog bloka u lokalni lanac: {e}")
+                
+                # Obavesti klijenta o grešci
+                if self.current_transaction:
+                    current_transaction_id = Transaction.from_dict(self.current_transaction.get("transaction")).id
+                    asyncio.create_task(self.notify_client_transaction_result(
+                        current_transaction_id,
+                        False,
+                        f"Error adding transaction to blockchain: {str(e)}"
+                    ))
 
-            # Resetuj stanje za sledeći mining ciklus
+            # Resetuj stanje
             self.reset_block_consensus()
             self.chain.can_mine = True
             self.chain.is_mining = False
@@ -418,10 +459,6 @@ class Peer:
             self.is_transaction_validation = False
             self.transaction_votes = []
 
-            print(f"✅ SVI NODOVI: Finalni blok postavljen - {self.mined_block.header if self.mined_block else 'none'}")
-            
-            # UKLANJAMO - transaction_completed() se poziva gore kada se blok stvarno doda
-            # await self.transaction_completed()
 
     async def _handle_mine(self, ws, data):
 
@@ -497,9 +534,7 @@ class Peer:
         return int(network_size * self.consensus_threshold) + 1
 
     def _check_transaction_consensus(self):
-
         required_votes = self.calculate_required_votes()
-
         print("Potrebni glasovi" + str(required_votes))
 
         def izdvoji_po_validnosti(lista):
@@ -508,13 +543,17 @@ class Peer:
             return validne, nevalidne
 
         positive_votes, negative_votes = izdvoji_po_validnosti(self.transaction_votes)
+        
+        # Dobij transaction_id iz trenutne transakcije
+        current_transaction_id = None
+        if self.current_transaction:
+            current_transaction_id = Transaction.from_dict(self.current_transaction.get("transaction")).id
 
         if len(positive_votes) >= required_votes:
-            print(f"👥✅ Transaction  ACCEPTED by consensus")
-            # Pokreni rudarenje u odvojenom thread-u
+            print(f"👥✅ Transaction ACCEPTED by consensus")
+            
             print(f"\n⛏️ [INFO] Peer {self.my_id}: Mining started at {util.get_current_time_precise()}")
             
-            # NOVO: Resetuj mining stanje pre početka
             self.chain.can_mine = True
             self.chain.is_mining = True
             self.consensus_finalized = False
@@ -523,8 +562,16 @@ class Peer:
             mining_thread.start()
 
         else:
-            print(f"👥❌ Transaction  REJECTED by consensus")
-            # NOVO: Ako je transakcija odbijena, završi trenutnu i pokreni sledeću
+            print(f"👥❌ Transaction REJECTED by consensus")
+            
+            # Obavesti klijenta o odbacivanju
+            if current_transaction_id:
+                asyncio.create_task(self.notify_client_transaction_result(
+                    current_transaction_id, 
+                    False, 
+                    f"Transaction rejected by network consensus. Positive votes: {len(positive_votes)}, Required: {required_votes}"
+                ))
+            
             asyncio.create_task(self.transaction_completed())
 
         self.is_transaction_validation = False
@@ -543,11 +590,21 @@ class Peer:
                 async for message in ws:
                     await self.handle_message(ws, message)
             finally:
-                # Ukloni peer iz incoming_peers
+                # Cleanup - ukloni iz incoming_peers i client_transactions
                 if ws in self.incoming_peers:
                     peer_info = self.incoming_peers[ws]
                     print(f"[INFO] Incoming peer {peer_info['id']} disconnected.")
                     del self.incoming_peers[ws]
+                
+                # Ukloni sve client transactions vezane za ovu konekciju
+                to_remove = []
+                for transaction_id, client_ws in self.client_transactions.items():
+                    if client_ws == ws:
+                        to_remove.append(transaction_id)
+                
+                for transaction_id in to_remove:
+                    print(f"[CLEANUP] Removing disconnected client transaction {transaction_id}")
+                    del self.client_transactions[transaction_id]
 
         return await websockets.serve(handler, "localhost", self.port)
 

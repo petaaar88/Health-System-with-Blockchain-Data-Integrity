@@ -35,7 +35,7 @@ class HealthAuthority(Account):
     def from_dict(cls, data):
         """Kreira HealthAuthority objekat iz dict-a (iz MongoDB)"""
         authority = cls.__new__(cls)
-        authority._id = data.get("id")
+        authority._id = data.get("_id")
         authority.public_key = data.get("public_key")
         authority.private_key = data.get("private_key")
         authority.name = data.get("name")

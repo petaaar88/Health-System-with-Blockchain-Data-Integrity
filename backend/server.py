@@ -4,6 +4,8 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 import uuid
 import json
 from datetime import datetime
+import websockets
+import asyncio
 
 from flask import Flask, request, jsonify
 from pymongo import MongoClient
@@ -16,21 +18,48 @@ from entities.doctor import Doctor
 from util.util import generate_secret_key_b64, convert_secret_key_to_bytes, encrypt, decrypt
 from util.blockchain_connection import BlockchainConnection
 
-def send_to_blockchain_per_request(message):
-    """Kreira novu konekciju za svaki request"""
-    blockchain_conn = BlockchainConnection()
-    
-    # Uspostavi konekciju
-    if not blockchain_conn.connect():
-        return False, "Failed to connect to blockchain"
-        
+async def send_to_blockchain_and_wait_response(message, timeout=60):
+    """
+    Šalje poruku blockchain peer-u i čeka odgovor
+    """
     try:
-        # Pošalji poruku i čekaj odgovor
-        success, response = blockchain_conn.send_message(message)
-        return success, response
-    finally:
-        # Uvek zatvori konekciju nakon request-a
-        blockchain_conn.disconnect()
+        # Konektuj se na blockchain peer (pretpostavljam port 8765)
+        uri = "ws://localhost:8765"
+        
+        async with websockets.connect(uri) as websocket:
+            # Pošalji poruku
+            await websocket.send(json.dumps(message))
+            print(f"📤 Sent to blockchain: {message['type']}")
+            
+            # Čekaj odgovor sa timeout-om
+            response = await asyncio.wait_for(websocket.recv(), timeout=timeout)
+            response_data = json.loads(response)
+            
+            print(f"📥 Received from blockchain: {response_data}")
+            return True, response_data
+            
+    except asyncio.TimeoutError:
+        return False, {"error": "Blockchain response timeout"}
+    except Exception as e:
+        return False, {"error": f"Blockchain connection error: {str(e)}"}
+
+def send_to_blockchain_per_request(message):
+    """
+    Wrapper funkcija za korišćenje u Flask route-u
+    """
+    try:
+        # Pokreni async funkciju iz sync konteksta
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            success, response = loop.run_until_complete(
+                send_to_blockchain_and_wait_response(message)
+            )
+            return success, response
+        finally:
+            loop.close()
+    except Exception as e:
+        return False, {"error": f"Failed to communicate with blockchain: {str(e)}"}
 
 app = Flask(__name__)
 
@@ -91,7 +120,8 @@ def add_patient():
                 "id": str(result.inserted_id)
             }
             
-            response =  json.loads(blockchain_response)
+            response =  blockchain_response
+
             if blockchain_success:
                 response_data["blockchain_response"] = response["message"]
             else:
@@ -145,7 +175,7 @@ def add_health_authority():
                 "id": str(result.inserted_id)
             }
             
-            response =  json.loads(blockchain_response)
+            response =  blockchain_response
             if blockchain_success:
                 response_data["blockchain_response"] = response["message"]
             else:
@@ -203,65 +233,95 @@ def add_health_record():
 
     secret_key = generate_secret_key_b64()
 
-    health_record_string_data = json.dumps(data)  # Pretvori dict u string pre enkripcije
+    health_record_string_data = json.dumps(data)
     encrypted_data = encrypt(health_record_string_data, convert_secret_key_to_bytes(secret_key))
 
     health_record = {
         "_id": new_id,
         "health_authority_id": data["health_authority_id"],
         "data": encrypted_data,
-        "key":secret_key,
+        "key": secret_key,
         "patient_id": data["patient_id"]
     }
 
+    
     patient_dict = patients_collection.find_one({"_id": data["patient_id"]})
+    if not patient_dict:
+        return {"error": "Patient not found"}, 404
+    
     health_authority_dict = health_authorities_collection.find_one({"_id": data["health_authority_id"]})
+    if not health_authority_dict:
+        return {"error": "Health authority not found"}, 404
 
     patient = Patient.from_dict(patient_dict)
     health_authority = HealthAuthority.from_dict(health_authority_dict)
 
-    transaction_body = TransactionBody(health_authority.public_key,patient.public_key, 'https:://nseto',datetime.now().isoformat(),util.hash256(data))
+    # Kreiraj transakciju
+    transaction_body = TransactionBody(
+        health_authority.public_key, 
+        patient.public_key, 
+        'https://nesto',
+        datetime.now().isoformat(),
+        util.hash256(data)
+    )
     transaction = Transaction(transaction_body)
     health_authority.sign(transaction)
-
+    
     try:
-        
-
-        # Ubaci u bazu kao dict
-        
-
+        # Pošalji na blockchain i čekaj odgovor
         message = {
-                    "type": "CLIENT_ADD_TRANSACTION",
-                        "data":{
-                            "transaction":transaction.to_dict(),
-                            "data_for_validation":data
-                        }
+            "type": "CLIENT_ADD_TRANSACTION",
+            "data": {
+                "transaction": transaction.to_dict(),
+                "data_for_validation": data
+            }
         }
 
         blockchain_success, blockchain_response = send_to_blockchain_per_request(message)
         
-        response_data = {
-            "message": "Health Authority successfully added", 
-            "id": str(result.inserted_id)
-        }
-        
-        result = health_records_collection.insert_one(health_record)
-
-        response =  json.loads(blockchain_response)
         if blockchain_success:
-            response_data["blockchain_response"] = response["message"]
+            # Proveri tip odgovora od blockchain-a
+            response_type = blockchain_response.get("type")
+            
+            if response_type == "TRANSACTION_RESULT":
+                transaction_success = blockchain_response.get("success", False)
+                blockchain_message = blockchain_response.get("message", "")
+                transaction_id = blockchain_response.get("transaction_id")
+                
+                if transaction_success:
+                    # Transakcija je uspešno dodana u blockchain
+                    result = health_records_collection.insert_one(health_record)
+                    
+                    return jsonify({
+                        "message": "Health record successfully added and confirmed on blockchain",
+                        "id": new_id,
+                        "transaction_id": transaction_id,
+                        "blockchain_status": blockchain_message,
+                        "database_id": str(result.inserted_id)
+                    }), 201
+                    
+                else:
+                    # Transakcija je odbijena
+                    return jsonify({
+                        "error": "Transaction rejected by blockchain network",
+                        "blockchain_message": blockchain_message,
+                        "transaction_id": transaction_id
+                    }), 400
+            else:
+                # Nepoznat tip odgovora
+                return jsonify({
+                    "error": "Unexpected blockchain response",
+                    "response": blockchain_response
+                }), 500
         else:
-            response_data["blockchain_error"] = response
-        
+            # Greška u komunikaciji sa blockchain-om
+            return jsonify({
+                "error": "Failed to communicate with blockchain",
+                "blockchain_error": blockchain_response.get("error", "Unknown error")
+            }), 500
 
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
-
-    
-
-    #health_records_collection.insert_one(health_record)
-
-    return jsonify({"message": "Health record successfully added", "id": new_id}), 201
 
 @app.route("/api/health-records/<string:hr_id>", methods=["GET"])
 def get_health_record(hr_id):

@@ -44,7 +44,7 @@ class Patient(Account):
         
         
         # Mapiranje podataka
-        patient._id = data.get("id")
+        patient._id = data.get("_id")
         patient.public_key = data.get("public_key")
         patient.private_key = data.get("private_key")
         patient.first_name = data.get("first_name")
