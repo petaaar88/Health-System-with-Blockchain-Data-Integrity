@@ -172,6 +172,9 @@ class Peer:
                 case "CLIENT_VERIFY_TRANSACTION":
                     await self._handle_client_verify_transaction(ws, data)
 
+                case "CLIENT_GET_ALL_TRANSACTIONS_OF_PATIENT":
+                    await self._handle_client_get_all_transactions_of_patient(ws, data)
+
                 # Transaction messages
                 case "VERIFY_TRANSACTION":
                     await self._handle_verify_transaction(data)
@@ -192,6 +195,15 @@ class Peer:
 
         except Exception as e:
             print(f"[ERROR] handle_message: {e}")
+
+    async def _handle_client_get_all_transactions_of_patient(self,ws,data):
+
+        accounts = util.read_from_json_file(f"./blockchain/db/{str(self.port)}_accounts.json")
+
+        if not any(acc["public_key"]== data for acc in accounts):
+            return await ws.send(json.dumps({"message": "Account does not exist!"}))
+        
+        return await ws.send(json.dumps({"message":self.chain.find_all_transactions_with_public_key(data)}))
 
     async def _handle_client_verify_transaction(self,ws, data):
         health_record_hash = self.chain.find_health_record(data["health_record_id"])

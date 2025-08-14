@@ -113,6 +113,15 @@ class Chain:
             
         return None
     
+    def find_all_transactions_with_public_key(self,public_key:str):
+        
+        transactions = []
+        for block in self.chain[1::]:
+            if block.transaction.body.patient == public_key:
+                transactions.append(block.transaction.body.to_dict())
+
+        return transactions
+
     @staticmethod
     def is_valid(chain: Chain):
         for i in range(1, len(chain.chain)):

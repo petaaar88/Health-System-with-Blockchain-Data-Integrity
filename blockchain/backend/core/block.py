@@ -31,7 +31,7 @@ class Block:
         self.header.timestamp = datetime.now() #timestamp trenutnog bloka
 
         if chain.can_mine:
-            print(f"\n✔️  #{self.header.height} Blok successfully mined by {self.header.miner} at {self.header.timestamp}.\n") #TODO ovde ide majner iz bloka koji je izmajnovao
+            print(f"\n✔️  #{self.header.height} Blok successfully mined by {self.header.miner} at {self.header.timestamp}.\n")
             print("Header of new block:")
             print(self.header)
 
