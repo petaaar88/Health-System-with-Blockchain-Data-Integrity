@@ -80,7 +80,7 @@ class Chain:
             for block in chain_dict:
                 self.chain.append(Block.from_dict(block))
 
-            print("Chain loaded from file")
+            print(f"Chain loaded from file at {util.get_current_time_precise()}")
         else:
             util.write_to_json_file(path,[self.chain[0].to_dict()])
 

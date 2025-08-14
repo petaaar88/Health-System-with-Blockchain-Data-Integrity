@@ -15,7 +15,7 @@ class BlockHeader:
         self.block_hash = ''
 
     def __str__(self):
-        return f"   Header: {{ \n     height: {self.height}, \n     id: {self.id}, \n     merkle root: {self.merkle_root}, \n     previous block hash: {self.previous_block_hash},\n     timestamp: {self.timestamp},\n     nonce: {self.nonce},\n     difficulty: {self.difficulty} \n     miner: {self.miner}, \n     block hash: {self.block_hash} \n   }},"
+        return f"   Header: {{ \n     height: {self.height}, \n     id: {self.id}, \n     merkle root: {self.merkle_root}, \n     previous block hash: {self.previous_block_hash},\n     timestamp: {self.timestamp},\n     nonce: {self.nonce},\n     difficulty: {self.difficulty} \n     miner: {self.miner}, \n     block hash: {self.block_hash} \n   }}"
 
     def to_dict(self):
         return {

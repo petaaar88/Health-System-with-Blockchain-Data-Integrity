@@ -67,7 +67,7 @@ class Block:
         return True
         
     def __str__(self):
-        return f" {{\n{self.header} \n   Transaction: {self.transaction}\n }}"
+        return f" {{\n{self.header}, \n   Transaction: {self.transaction}\n }}"
 
     def to_dict(self):
         return {
