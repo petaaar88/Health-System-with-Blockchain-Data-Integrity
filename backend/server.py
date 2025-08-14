@@ -16,7 +16,6 @@ from blockchain.backend.core.transaction_body import TransactionBody
 from blockchain.backend.util import util
 from entities.doctor import Doctor
 from util.util import generate_secret_key_b64, convert_secret_key_to_bytes, encrypt, decrypt
-from util.blockchain_connection import BlockchainConnection
 
 async def send_to_blockchain_and_wait_response(message, timeout=60):
     """
@@ -260,7 +259,7 @@ def add_health_record():
     transaction_body = TransactionBody(
         health_authority.public_key, 
         patient.public_key, 
-        'https://nesto',
+        new_id,
         datetime.now().isoformat(),
         util.hash256(data)
     )
@@ -330,6 +329,9 @@ def get_health_record(hr_id):
 
     print(decrypt(health_dict["data"],convert_secret_key_to_bytes(health_dict["key"])))
     return jsonify(json.loads(decrypt(health_dict["data"],convert_secret_key_to_bytes(health_dict["key"])))), 201
+
+
+
 
 if __name__ == "__main__":
     app.run(debug=True)
