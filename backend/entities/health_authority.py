@@ -2,7 +2,11 @@ import uuid
 from blockchain.backend.core.account import Account
 
 class HealthAuthority(Account):
-    def __init__(self, name, type, address, phone):
+    def __init__(self, name = None, type = None, address = None, phone = None):
+
+        if(name == None):
+            return
+        
         super().__init__()
         
         self._id = uuid.uuid4().hex
@@ -16,6 +20,8 @@ class HealthAuthority(Account):
     def to_dict(self):
         return {
             "_id": self._id,
+            "public_key": self.public_key,
+            "private_key":self.private_key,
             "name": self.name,
             "type": self.type,
             "address": self.address,

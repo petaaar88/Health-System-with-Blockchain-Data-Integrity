@@ -3,18 +3,20 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 import uuid
 import json
-import websocket
-import threading
+from datetime import datetime
 
 from flask import Flask, request, jsonify
 from pymongo import MongoClient
 from entities.patient import Patient
 from entities.health_authority import HealthAuthority
+from blockchain.backend.core.transaction import Transaction
+from blockchain.backend.core.transaction_body import TransactionBody
+from blockchain.backend.util import util
 from entities.doctor import Doctor
 from util.util import generate_secret_key_b64, convert_secret_key_to_bytes, encrypt, decrypt
 from util.blockchain_connection import BlockchainConnection
 
-def send_to_blockchain_per_request(data, message):
+def send_to_blockchain_per_request(message):
     """Kreira novu konekciju za svaki request"""
     blockchain_conn = BlockchainConnection()
     
@@ -82,7 +84,7 @@ def add_patient():
                 "data": new_account
             }
 
-            blockchain_success, blockchain_response = send_to_blockchain_per_request(new_account, message)
+            blockchain_success, blockchain_response = send_to_blockchain_per_request(message)
             
             response_data = {
                 "message": "Patient successfully added", 
@@ -136,7 +138,7 @@ def add_health_authority():
                 "data": new_account
             }
 
-            blockchain_success, blockchain_response = send_to_blockchain_per_request(new_account, message)
+            blockchain_success, blockchain_response = send_to_blockchain_per_request(message)
             
             response_data = {
                 "message": "Health Authority successfully added", 
@@ -191,6 +193,9 @@ def add_doctor():
 @app.route("/api/health-records", methods=["POST"])
 def add_health_record():
     health_records_collection = db["health_records"]
+    patients_collection = db["patients"]
+    health_authorities_collection = db["health_authorities"]
+
     data = request.json
 
     new_id = uuid.uuid4().hex
@@ -198,8 +203,8 @@ def add_health_record():
 
     secret_key = generate_secret_key_b64()
 
-    json_data = json.dumps(data)  # Pretvori dict u string pre enkripcije
-    encrypted_data = encrypt(json_data, convert_secret_key_to_bytes(secret_key))
+    health_record_string_data = json.dumps(data)  # Pretvori dict u string pre enkripcije
+    encrypted_data = encrypt(health_record_string_data, convert_secret_key_to_bytes(secret_key))
 
     health_record = {
         "_id": new_id,
@@ -209,7 +214,52 @@ def add_health_record():
         "patient_id": data["patient_id"]
     }
 
-    health_records_collection.insert_one(health_record)
+    patient_dict = patients_collection.find_one({"_id": data["patient_id"]})
+    health_authority_dict = health_authorities_collection.find_one({"_id": data["health_authority_id"]})
+
+    patient = Patient.from_dict(patient_dict)
+    health_authority = HealthAuthority.from_dict(health_authority_dict)
+
+    transaction_body = TransactionBody(health_authority.public_key,patient.public_key, 'https:://nseto',datetime.now().isoformat(),util.hash256(data))
+    transaction = Transaction(transaction_body)
+    health_authority.sign(transaction)
+
+    try:
+        
+
+        # Ubaci u bazu kao dict
+        
+
+        message = {
+                    "type": "CLIENT_ADD_TRANSACTION",
+                        "data":{
+                            "transaction":transaction.to_dict(),
+                            "data_for_validation":data
+                        }
+        }
+
+        blockchain_success, blockchain_response = send_to_blockchain_per_request(message)
+        
+        response_data = {
+            "message": "Health Authority successfully added", 
+            "id": str(result.inserted_id)
+        }
+        
+        result = health_records_collection.insert_one(health_record)
+
+        response =  json.loads(blockchain_response)
+        if blockchain_success:
+            response_data["blockchain_response"] = response["message"]
+        else:
+            response_data["blockchain_error"] = response
+        
+
+    except Exception as e:
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+
+    
+
+    #health_records_collection.insert_one(health_record)
 
     return jsonify({"message": "Health record successfully added", "id": new_id}), 201
 
