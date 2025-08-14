@@ -133,61 +133,62 @@ class Peer:
             data = msg.get("data")
             sender_id = msg.get("sender_id", "unknown")
 
-            if msg_type == "HANDSHAKE":
-                await self._handle_handshake(ws, data)
+            match (msg_type):
+                case "HANDSHAKE":
+                    await self._handle_handshake(ws, data)
 
-            elif msg_type == "HANDSHAKE_ACK":
-                await self._handle_handshake_ack(data)
+                case "HANDSHAKE_ACK":
+                    await self._handle_handshake_ack(data)
 
-            elif msg_type == "NEW_BLOCK":
-                await self._handle_new_block(sender_id, data)
+                case "NEW_BLOCK":
+                    await self._handle_new_block(sender_id, data)
 
-            elif msg_type == "PEERS":
-                await self._handle_peers_list(sender_id, data)
-            
-            elif msg_type == "GET_DATA":
-                await self._handle_get_data(ws)
+                case "PEERS":
+                    await self._handle_peers_list(sender_id, data)
+                
+                case "GET_DATA":
+                    await self._handle_get_data(ws)
 
-            elif msg_type == "RECEIVE_DATA":
-                await self._handle_receive_data(data)
+                case "RECEIVE_DATA":
+                    await self._handle_receive_data(data)
 
-            elif msg_type == "ADD_ACCOUNT":
-                await self._handle_add_account(data)
+                case "ADD_ACCOUNT":
+                    await self._handle_add_account(data)
 
-            # CLIENT messages
+                # CLIENT messages
 
-            elif msg_type == "CLIENT_ADD_ACCOUNT":
-                await self._handle_client_add_account(ws,data)
+                case "CLIENT_ADD_ACCOUNT":
+                    await self._handle_client_add_account(ws,data)
 
-            elif msg_type == "CLIENT_ADD_TRANSACTION":
-                await self.add_pending_transaction(data, ws)
+                case "CLIENT_ADD_TRANSACTION":
+                    await self.add_pending_transaction(data, ws)
 
-            elif msg_type == "CLIENT_GET_CHAIN":
-                await self._handle_client_get_chain(ws)
+                case "CLIENT_GET_CHAIN":
+                    await self._handle_client_get_chain(ws)
 
-            elif msg_type == "CLIENT_GET_QUEUE_STATUS":
-                await self._handle_get_queue_status(ws)
-            
-            elif msg_type == "CLIENT_VERIFY_TRANSACTION":
-                await self._handle_client_verify_transaction(ws, data)
+                case "CLIENT_GET_QUEUE_STATUS":
+                    await self._handle_get_queue_status(ws)
+                
+                case "CLIENT_VERIFY_TRANSACTION":
+                    await self._handle_client_verify_transaction(ws, data)
 
-            # Transaction messages
-            elif msg_type == "VERIFY_TRANSACTION":
-                await self._handle_verify_transaction(data)
+                # Transaction messages
+                case "VERIFY_TRANSACTION":
+                    await self._handle_verify_transaction(data)
 
-            elif msg_type == "TRANSACTION_VOTE":
-                self._handle_transactin_vote(data)
+                case "TRANSACTION_VOTE":
+                    self._handle_transactin_vote(data)
 
-            # Block messages
-            elif msg_type == "VERIFY_BLOCK":
-                await self._handle_verify_block(data, sender_id)
+                # Block messages
+                case "VERIFY_BLOCK":
+                    await self._handle_verify_block(data, sender_id)
 
-            # Novo - finalni blok
-            elif msg_type == "FINAL_BLOCK_CONSENSUS":
-                await self._handle_final_block_consensus(data)
+                # Novo - finalni blok
+                case "FINAL_BLOCK_CONSENSUS":
+                    await self._handle_final_block_consensus(data)
 
-            else:
-                print(f"[WARN] Unknown message type: {msg_type}")
+                case _:
+                    print(f"[WARN] Unknown message type: {msg_type}")
 
         except Exception as e:
             print(f"[ERROR] handle_message: {e}")
@@ -403,10 +404,6 @@ class Peer:
 
             try:
                 if Block.is_valid(self.mined_block, self.chain):
-                    #TODO odkomentaisi
-                    #self.chain.add_to_block_to_chain(self.mined_block)
-                    #print(f"✅ Finalni blok dodat u lanac: {winning_timestamp}")
-                    print("validan je")
                     
                     # NOVO: Završi transakciju samo ako je ovo node koji je kopao blok
                     if winning_sender == self.my_id and self.is_processing_transaction:
