@@ -331,7 +331,44 @@ def get_health_record(hr_id):
     return jsonify(json.loads(decrypt(health_dict["data"],convert_secret_key_to_bytes(health_dict["key"])))), 201
 
 
+@app.route("/api/health-records/verify/<string:hr_id>", methods=["GET"])
+def verify_health_record(hr_id):
+    health_records_collection = db["health_records"]
+    data = request.json
 
+    health_record_dict = health_records_collection.find_one({"_id": hr_id})
+
+    if not health_record_dict:
+        return {"error": "Health record not found"}, 404
+      
+    if health_record_dict["key"] != data["secret_key"]:
+        return {"error": "Key is invalid!"}, 403
+
+    try:
+
+        health_record_for_verification = json.loads(decrypt(health_record_dict["data"],convert_secret_key_to_bytes(health_record_dict["key"])))
+        message = {
+                "type": "CLIENT_VERIFY_TRANSACTION",
+                "data": {
+                    "health_record_id":hr_id,
+                    "health_record" : health_record_for_verification
+                }
+        }
+
+        blockchain_success, blockchain_response = send_to_blockchain_per_request(message)
+        response_data = {}
+        response =  blockchain_response
+
+        if blockchain_success:
+            response_data["blockchain_response"] = response["message"]
+        else:
+            response_data["blockchain_error"] = response
+                
+        return jsonify(response_data), 200
+       
+
+    except Exception as e:
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)

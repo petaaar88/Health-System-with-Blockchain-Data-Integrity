@@ -106,6 +106,13 @@ class Chain:
         
         return chain_dict
 
+    def find_health_record(self, health_record_id):
+        for block in self.chain[1::]:
+            if block.transaction.body.health_record_id == health_record_id:
+                return block.transaction.body.health_record_hash
+            
+        return None
+    
     @staticmethod
     def is_valid(chain: Chain):
         for i in range(1, len(chain.chain)):

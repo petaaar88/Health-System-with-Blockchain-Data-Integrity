@@ -167,6 +167,9 @@ class Peer:
 
             elif msg_type == "CLIENT_GET_QUEUE_STATUS":
                 await self._handle_get_queue_status(ws)
+            
+            elif msg_type == "CLIENT_VERIFY_TRANSACTION":
+                await self._handle_client_verify_transaction(ws, data)
 
             # Transaction messages
             elif msg_type == "VERIFY_TRANSACTION":
@@ -188,6 +191,17 @@ class Peer:
 
         except Exception as e:
             print(f"[ERROR] handle_message: {e}")
+
+    async def _handle_client_verify_transaction(self,ws, data):
+        health_record_hash = self.chain.find_health_record(data["health_record_id"])
+        if health_record_hash == None:
+            return await ws.send(json.dumps({"message":"Health record does not exist!"}))
+
+        if util.hash256(data["health_record"]) == health_record_hash:
+            return await ws.send(json.dumps({"message":"Health record is valid!"}))
+        else:
+            return await ws.send(json.dumps({"message":"Health record is invalid!"}))
+
 
     async def _handle_client_add_account(self,ws, data):
         new_account = {
