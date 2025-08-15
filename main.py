@@ -38,7 +38,7 @@ health_record = {
     "hospital_id":"asdfasdfasfasdf"
   }
 
-transaction_body = TransactionBody(hospital.public_key,patient.public_key, 'https:://nseto',datetime.now().isoformat(),util.hash256(health_record))
+transaction_body = TransactionBody(hospital.public_key,patient.public_key, 'asdfasdf',datetime.now().isoformat(),util.hash256(health_record))
 transaction = Transaction(transaction_body)
 hospital.sign(transaction)
 

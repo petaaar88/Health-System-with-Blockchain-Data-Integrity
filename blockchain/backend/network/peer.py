@@ -181,21 +181,30 @@ class Peer:
 
     async def _handle_client_get_all_transactions_of_patient(self,ws,data):
 
+        print(f"📋 [CLNT {util.get_current_time_precise()}] Peer {self.my_id}: Get all transactions of patient.")
+
         accounts = util.read_from_json_file(f"./blockchain/db/{str(self.port)}_accounts.json")
 
         if not any(acc["public_key"]== data for acc in accounts):
+            print(f"✅ [INFO {util.get_current_time_precise()}] Peer {self.my_id}: Get all transactions of patient complited.")
             return await ws.send(json.dumps({"message": "Account does not exist!"}))
         
+        print(f"✅ [INFO {util.get_current_time_precise()}] Peer {self.my_id}: Get all transactions of patient complited.")
         return await ws.send(json.dumps({"message":self.chain.find_all_transactions_with_public_key(data)}))
 
     async def _handle_client_verify_transaction(self,ws, data):
+        print(f"📋 [CLNT {util.get_current_time_precise()}] Peer {self.my_id}: Verify transaction.")
+
         health_record_hash = self.chain.find_health_record(data["health_record_id"])
         if health_record_hash == None:
+            print(f"✅ [INFO {util.get_current_time_precise()}] Peer {self.my_id}: Verification complited.")
             return await ws.send(json.dumps({"message":"Health record does not exist!"}))
 
         if util.hash256(data["health_record"]) == health_record_hash:
+            print(f"✅ [INFO {util.get_current_time_precise()}] Peer {self.my_id}: Verification complited.")
             return await ws.send(json.dumps({"message":"Health record is valid!"}))
         else:
+            print(f"✅ [INFO {util.get_current_time_precise()}] Peer {self.my_id}: Verification complited.")
             return await ws.send(json.dumps({"message":"Health record is invalid!"}))
 
 
