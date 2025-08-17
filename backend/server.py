@@ -447,14 +447,33 @@ def add_health_record():
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
-@app.route("/api/health-records/<string:hr_id>", methods=["GET"])
-def get_health_record(hr_id):
+@app.route("/api/health-records/decrypt/<string:hr_id>", methods=["GET"])
+@require_user_type("doctors")
+def decrypt_health_record(hr_id):
     #TODO dodaj verifikaciju za proveru da li pacijent ili health care imaju dozvolu preko jwt, ako nemaju proveri da li body ima secret key
     health_records_collection = db["health_records"]
     health_record_dict = health_records_collection.find_one({"_id": hr_id})
 
+
     if not health_record_dict:
         return {"error": "Health record not found"}, 404
+    
+    user, user_type = get_current_user()
+
+    if health_record_dict["health_authority_id"] != user["health_authority_id"]:
+        return jsonify({"message":"Dont have access!"}), 400
+
+    data = request.json
+
+    if data is None:
+        return jsonify({"message":"Secret key not provided!"}), 400
+    
+    if "secret_key" not in data:
+        return jsonify({"message":"Secret key not provided!"}), 400
+
+    if health_record_dict["key"] != data["secret_key"]:
+        return jsonify({"message":"Secret key invalid!"}), 400
+
 
     return jsonify(json.loads(decrypt(health_record_dict["data"],convert_secret_key_to_bytes(health_record_dict["key"])))), 200
 
@@ -581,6 +600,7 @@ def get_health_records_of_patient(patient_personal_id):
                 health_record["health_authority_name"] = ha["name"]
 
                 health_record["added_at_blockchain"] = health_record["date"]
+                health_record["patient_id"] = patients_collection.find_one({"public_key":health_record["patient"]})["_id"]
 
                 del health_record["patient"]
                 del health_record["creator"]
@@ -598,6 +618,111 @@ def get_health_records_of_patient(patient_personal_id):
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
+@app.route("/api/requests", methods=["POST"])
+@require_user_type("doctors")
+def add_request():
+    data = request.json
+    user, user_type = get_current_user()
+    patients_collection = db["patients"]
+    health_records_collection = db["health_records"]
+    request_collection = db["requests_for_health_records"]
+
+    if patients_collection.find_one({"_id":data["patient_id"]}) is None:
+        return jsonify({"message":"Patient not found!"}), 201
+    
+    if health_records_collection.find_one({"_id":data["health_record_id"]}) is None:
+        return jsonify({"message":"Health record not found!"}), 201
+    
+    if request_collection.find_one({"patient_id":data["patient_id"],"health_record_id":data["health_record_id"]}) is not None:
+        return jsonify({"error": "Request aleady exists!"}), 400
+
+    requests_for_health_records_collection = db["requests_for_health_records"]
+    data["health_authority_id"] = user["health_authority_id"]
+    data["_id"] = uuid.uuid4().hex
+    result = requests_for_health_records_collection.insert_one(data)
+    
+
+    if result.inserted_id:
+        return jsonify(data), 201
+    else:    
+        return jsonify({"error": "Failed to insert patient!"}), 500
+
+
+@app.route("/api/requests/patient", methods=["GET"])
+@require_user_type("patients")
+def get_patient_requests_by_patient():
+    user, user_type = get_current_user()
+    requests_collection = db["requests_for_health_records"]
+
+    cursor = requests_collection.find({"patient_id":user["_id"]})
+
+    requests = []
+    for request in cursor:
+        if "key" not in request:
+            requests.append(request)
+
+    return jsonify(requests), 200
+
+@app.route("/api/requests/doctors", methods=["GET"])
+@require_user_type("doctors")
+def get_patient_requests_by_doctors():
+    user, user_type = get_current_user()
+    requests_collection = db["requests_for_health_records"]
+
+    cursor = requests_collection.find({"health_authority_id":user["health_authority_id"]})
+
+    requests = []
+    for request in cursor:
+        requests.append(request)
+
+    return jsonify(requests), 200
+
+@app.route("/api/requests/<string:request_id>", methods=["DELETE"])
+@require_user_type("patients","doctors")
+def delete_request(request_id):
+    user, user_type = get_current_user()
+    requests_collection = db["requests_for_health_records"]
+
+    try:
+        # Proverite da li zahtev pripada trenutnom korisniku
+        result = requests_collection.delete_one({"_id": request_id})
+        
+        if result.deleted_count == 1:
+            return jsonify({"message": "Request not found!"}), 200
+        else:
+            return jsonify({"error": "Request not found!"}), 404
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/requests/<string:request_id>", methods=["PATCH"])
+@require_user_type("patients")
+def accept_request(request_id):
+
+    data = request.json
+
+    if data is None:
+        return jsonify({"error": "Secret key not provided!"}), 400
+
+    user, user_type = get_current_user()
+    requests_collection = db["requests_for_health_records"]
+
+    try:
+        if requests_collection.find_one({"patient_id":user["_id"],"_id":request_id}) is None:
+            return jsonify({"error": "Dont have access!"}), 400
+        
+        result = requests_collection.update_one(
+            {"_id": request_id},          # filter kojim biraš dokument
+            {"$set": {"key": data["secret_key"]}}  # novo polje koje dodaješ
+        )
+        
+        if result.modified_count > 0:
+            return jsonify({"message": "Request accepted!"}), 200
+        else:
+            return jsonify({"error": "Request not found!"}), 404
+            
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(debug=True)
