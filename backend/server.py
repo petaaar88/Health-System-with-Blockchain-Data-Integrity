@@ -205,12 +205,6 @@ def add_patient():
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
-@app.route("/api/patients/<string:patient_id>", methods=["GET"])
-def get_patient(patient_id):
-    collection = db["patients"]
-    patient_dict = collection.find_one({"_id": patient_id})
-    return jsonify(patient_dict), 201
-
 @app.route("/api/health-authority", methods=["POST"])
 @require_user_type('central_authority')
 def add_health_authority():
@@ -450,7 +444,7 @@ def add_health_record():
 @app.route("/api/health-records/decrypt/<string:hr_id>", methods=["GET"])
 @require_user_type("doctors")
 def decrypt_health_record(hr_id):
-    #TODO dodaj verifikaciju za proveru da li pacijent ili health care imaju dozvolu preko jwt, ako nemaju proveri da li body ima secret key
+    
     health_records_collection = db["health_records"]
     health_record_dict = health_records_collection.find_one({"_id": hr_id})
 
@@ -723,6 +717,63 @@ def accept_request(request_id):
             
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/doctors/<string:doctor_id>", methods = ["GET"])
+@jwt_required()
+def get_doctor(doctor_id):
+    doctors_collection = db["doctors"]
+
+    doctor = doctors_collection.find_one({"_id":doctor_id})
+    if doctor is None:
+        return jsonify({"message":"Doctor not found!"}), 400
+    
+    del doctor["password"]
+    return jsonify(doctor), 200
+
+@app.route("/api/health_authority/<string:ha_id>", methods = ["GET"])
+@jwt_required()
+def get_health_authority(ha_id):
+    ha_collection = db["health_authorities"]
+
+    ha = ha_collection.find_one({"_id":ha_id})
+    if ha is None:
+        return jsonify({"message":"Health authority not found!"}), 400
+    
+    del ha["password"]
+    del ha["public_key"]
+    del ha["private_key"]
+    del ha["doctors"]
+    del ha["patients"]
+
+    return jsonify(ha), 200
+
+@app.route("/api/patients/<string:patient_id>", methods = ["GET"])
+@jwt_required()
+def get_patient(patient_id):
+    patient_collection = db["patients"]
+
+    patinet = patient_collection.find_one({"_id":patient_id})
+    if patinet is None:
+        return jsonify({"message":"Patinet not found!"}), 400
+    
+    del patinet["password"]
+    del patinet["public_key"]
+    del patinet["private_key"]
+    del patinet["health_records"]
+    
+    return jsonify(patinet), 200
+
+@app.route("/api/central-authority/<string:ca_id>", methods = ["GET"])
+@jwt_required()
+def get_central_authority(ca_id):
+    ca_collection = db["central_authority"]
+
+    ca = ca_collection.find_one({"_id":ca_id})
+    if ca is None:
+        return jsonify({"message":"Central authority not found!"}), 400
+    
+    del ca["password"]
+    return jsonify(ca), 200
 
 if __name__ == "__main__":
     app.run(debug=True)
