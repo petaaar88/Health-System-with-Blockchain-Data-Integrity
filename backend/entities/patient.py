@@ -2,7 +2,7 @@ import uuid
 from blockchain.backend.core.account import Account
 
 class Patient(Account):
-    def __init__(self, first_name = None, last_name = None, personal_id = None, date_of_birth = None, gender = None, address = None, phone = None, citizenship = None):
+    def __init__(self, first_name = None, last_name = None, personal_id = None, date_of_birth = None, gender = None, address = None, phone = None, citizenship = None, password = None):
 
         if(first_name == None and last_name == None):
             return
@@ -18,11 +18,14 @@ class Patient(Account):
         self.address = address
         self.phone = phone
         self.citizenship = citizenship
+        self.password = password
+
         self.health_records = []
 
     def to_dict(self):
         return {
             "_id": self._id,
+            "password": self.password,
             "public_key": self.public_key,
             "private_key":self.private_key,
             "first_name": self.first_name,
@@ -47,6 +50,7 @@ class Patient(Account):
         patient._id = data.get("_id")
         patient.public_key = data.get("public_key")
         patient.private_key = data.get("private_key")
+        patient.password = data.get("password")
         patient.first_name = data.get("first_name")
         patient.last_name = data.get("last_name")
         patient.personal_id = data.get("personal_id")

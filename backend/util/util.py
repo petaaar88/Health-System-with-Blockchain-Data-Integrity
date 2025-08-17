@@ -1,4 +1,9 @@
 import base64
+import websockets
+import asyncio
+import json
+from bson import ObjectId, Binary
+
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
 from Crypto.Util.Padding import pad, unpad
@@ -23,3 +28,59 @@ def decrypt(enc_data, key):
     plaintext = unpad(cipher.decrypt(ciphertext), AES.block_size)
     return plaintext.decode("utf-8")
 
+async def send_to_blockchain_and_wait_response(message, timeout=60):
+    """
+    Šalje poruku blockchain peer-u i čeka odgovor
+    """
+    try:
+        # Konektuj se na blockchain peer (pretpostavljam port 8765)
+        uri = "ws://localhost:8765"
+        
+        async with websockets.connect(uri) as websocket:
+            # Pošalji poruku
+            await websocket.send(json.dumps(message))
+            print(f"📤 Sent to blockchain: {message['type']}")
+            
+            # Čekaj odgovor sa timeout-om
+            response = await asyncio.wait_for(websocket.recv(), timeout=timeout)
+            response_data = json.loads(response)
+            
+            print(f"📥 Received from blockchain: {response_data}")
+            return True, response_data
+            
+    except asyncio.TimeoutError:
+        return False, {"error": "Blockchain response timeout"}
+    except Exception as e:
+        return False, {"error": f"Blockchain connection error: {str(e)}"}
+
+def send_to_blockchain_per_request(message):
+    """
+    Wrapper funkcija za korišćenje u Flask route-u
+    """
+    try:
+        # Pokreni async funkciju iz sync konteksta
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            success, response = loop.run_until_complete(
+                send_to_blockchain_and_wait_response(message)
+            )
+            return success, response
+        finally:
+            loop.close()
+    except Exception as e:
+        return False, {"error": f"Failed to communicate with blockchain: {str(e)}"}
+
+
+def serialize_doc(doc):
+    result = {}
+    for key, value in doc.items():
+        if isinstance(value, ObjectId):
+            result[key] = str(value)
+        elif isinstance(value, bytes):  # Ako je već Python bytes
+            result[key] = value.decode("utf-8", errors="ignore")  # ili base64
+        elif isinstance(value, Binary):  # Ako Mongo vrati Binary
+            result[key] = value.decode("utf-8", errors="ignore")
+        else:
+            result[key] = value
+    return result

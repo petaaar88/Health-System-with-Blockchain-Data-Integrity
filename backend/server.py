@@ -3,71 +3,141 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 import uuid
 import json
-from datetime import datetime
-import websockets
-import asyncio
+import datetime
 
 from flask import Flask, request, jsonify
 from pymongo import MongoClient
+from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
+from werkzeug.security import check_password_hash, generate_password_hash
+
 from entities.patient import Patient
 from entities.health_authority import HealthAuthority
 from blockchain.backend.core.transaction import Transaction
 from blockchain.backend.core.transaction_body import TransactionBody
 from blockchain.backend.util import util
 from entities.doctor import Doctor
-from util.util import generate_secret_key_b64, convert_secret_key_to_bytes, encrypt, decrypt
+from util.util import generate_secret_key_b64, convert_secret_key_to_bytes, encrypt, decrypt, send_to_blockchain_per_request, serialize_doc
 
-async def send_to_blockchain_and_wait_response(message, timeout=60):
-    """
-    Šalje poruku blockchain peer-u i čeka odgovor
-    """
-    try:
-        # Konektuj se na blockchain peer (pretpostavljam port 8765)
-        uri = "ws://localhost:8765"
-        
-        async with websockets.connect(uri) as websocket:
-            # Pošalji poruku
-            await websocket.send(json.dumps(message))
-            print(f"📤 Sent to blockchain: {message['type']}")
-            
-            # Čekaj odgovor sa timeout-om
-            response = await asyncio.wait_for(websocket.recv(), timeout=timeout)
-            response_data = json.loads(response)
-            
-            print(f"📥 Received from blockchain: {response_data}")
-            return True, response_data
-            
-    except asyncio.TimeoutError:
-        return False, {"error": "Blockchain response timeout"}
-    except Exception as e:
-        return False, {"error": f"Blockchain connection error: {str(e)}"}
-
-def send_to_blockchain_per_request(message):
-    """
-    Wrapper funkcija za korišćenje u Flask route-u
-    """
-    try:
-        # Pokreni async funkciju iz sync konteksta
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            success, response = loop.run_until_complete(
-                send_to_blockchain_and_wait_response(message)
-            )
-            return success, response
-        finally:
-            loop.close()
-    except Exception as e:
-        return False, {"error": f"Failed to communicate with blockchain: {str(e)}"}
 
 app = Flask(__name__)
+
+app.config['JWT_SECRET_KEY'] = 'your-secret-key-here'  # Promeni ovo u produkciji!
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = datetime.timedelta(hours=1)  # Token ističe za 1 sat
+jwt = JWTManager(app)
 
 # Povezivanje na lokalnu MongoDB bazu
 client = MongoClient("mongodb://localhost:27017/")
 db = client["cs203_project-health_system"]  # baza
 
+def get_current_user():
+    """Vraća podatke o trenutno ulogovanom korisniku"""
+    from flask_jwt_extended import get_jwt_identity
+    
+    user_id = get_jwt_identity()
+    
+    # Definišemo kolekcije
+    collections = {
+        'patients': db['patients'],
+        'health_authorities': db['health_authorities'], 
+        'doctors': db['doctors'],
+        'central_authority': db['central_authority']
+    }
+    
+    # Pretražujemo kroz sve kolekcije da pronađemo korisnika po ID-u
+    for collection_name, collection in collections.items():
+        user = collection.find_one({'_id': user_id})
+        if user:
+            return user, collection_name
+    
+    return None, None
+
+@jwt.expired_token_loader
+def expired_token_callback(jwt_header, jwt_payload):
+    return jsonify({'message': 'Token expired'}), 401
+
+# Handler za neispravne tokene
+@jwt.invalid_token_loader
+def invalid_token_callback(error):
+    return jsonify({'message': 'Invalid token!'}), 401
+
+# Handler za nedostajuće tokene
+@jwt.unauthorized_loader
+def missing_token_callback(error):
+    return jsonify({'message': 'Token required to access!'}), 401
+
+
+# Decorator za proveru user type-a (zadržao sam i ovaj)
+def require_user_type(*allowed_types):
+    """Decorator koji dozvoljava pristup samo određenim tipovima korisnika"""
+    def decorator(f):
+        from functools import wraps
+        
+        @wraps(f)
+        @jwt_required()
+        def decorated_function(*args, **kwargs):
+            try:
+                from flask_jwt_extended import get_jwt
+                claims = get_jwt()
+                user_type = claims.get('user_type', '')
+                
+                if user_type not in allowed_types:
+                    return jsonify({'message': 'Access denied for this user type'}), 403
+                    
+            except:
+                return jsonify({'message': 'Invalid token'}), 401
+                
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator
+
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    user_id = request.json.get('id', None)
+    password = request.json.get('password', None)
+    
+    if not user_id or not password:
+        return jsonify({'message': 'ID and password are required!'}), 400
+    
+    collections = {
+        'patients': db['patients'],
+        'health_authorities': db['health_authorities'], 
+        'doctors': db['doctors'],
+        'central_authority': db['central_authority']
+    }
+    
+    user = None
+    user_type = None
+
+    
+    for collection_name, collection in collections.items():
+        user = collection.find_one({'_id': user_id})
+        if user:
+            user_type = collection_name
+            break
+    
+    if not user:
+        return jsonify({'message': 'User not found!'}), 401
+    
+    if not check_password_hash(user.get('password', ''), password):
+        return jsonify({'message': 'Invalid credentials!'}), 401
+    
+    additional_claims = {
+        'user_type': user_type
+    }
+    
+    access_token = create_access_token(
+        identity=str(user_id),
+        additional_claims=additional_claims
+    )
+    
+    return jsonify({
+        'access_token': access_token,
+        'message': 'Login successful'
+    })
 
 @app.route("/api/patients", methods=["POST"])
+@require_user_type('central_authority')
 def add_patient():
     collection = db["patients"]   
 
@@ -78,7 +148,7 @@ def add_patient():
             return jsonify({"error": "No data provided"}), 400
         
         required_fields = ["first_name", "last_name", "personal_id", "date_of_birth", 
-                          "gender", "address", "phone", "citizenship"]
+                          "gender", "address", "phone", "citizenship","password"]
         
         for field in required_fields:
             if field not in data:
@@ -95,40 +165,42 @@ def add_patient():
             gender=data["gender"],
             address=data["address"],
             phone=data["phone"],
-            citizenship=data["citizenship"]
+            citizenship=data["citizenship"],
+            password=generate_password_hash(data["password"])
         )
 
-        result = collection.insert_one(new_patient.to_dict())
+
+       
+        new_account = {
+            "public_key": new_patient.public_key,
+            "private_key": new_patient.private_key
+        }
+
+        message = {
+            "type": "CLIENT_ADD_ACCOUNT",
+            "data": new_account
+        }
+
+        blockchain_success, blockchain_response = send_to_blockchain_per_request(message)
         
-        if result.inserted_id:
-            # Slanje na blockchain - nova konekcija za ovaj request
-            new_account = {
-                "public_key": new_patient.public_key,
-                "private_key": new_patient.private_key
-            }
+        response_data = {}
+        
+        response =  blockchain_response
 
-            message = {
-                "type": "CLIENT_ADD_ACCOUNT",
-                "data": new_account
-            }
+        if blockchain_success:
+            response_data["blockchain_response"] = response["message"]
+            result = collection.insert_one(new_patient.to_dict())
 
-            blockchain_success, blockchain_response = send_to_blockchain_per_request(message)
-            
-            response_data = {
-                "message": "Patient successfully added", 
-                "id": str(result.inserted_id)
-            }
-            
-            response =  blockchain_response
-
-            if blockchain_success:
-                response_data["blockchain_response"] = response["message"]
+            if result.inserted_id:
+                response_data["message"] = "Patient successfully added"
+                response_data["id"] = result.inserted_id
             else:
-                response_data["blockchain_error"] = response
-            
-            return jsonify(response_data), 201
+                return jsonify({"error": "Failed to insert patient!"}), 500
         else:
-            return jsonify({"error": "Failed to insert patient"}), 500
+            response_data["blockchain_error"] = response
+        
+        return jsonify(response_data), 201
+       
 
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
@@ -140,66 +212,90 @@ def get_patient(patient_id):
     return jsonify(patient_dict), 201
 
 @app.route("/api/health-authority", methods=["POST"])
+@require_user_type('central_authority')
 def add_health_authority():
     collection = db["health_authorities"]
     data = request.json
     
+    if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+    required_fields = ["name", "type", "address", "phone", "password"]
+        
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"error": f"Missing required field: {field}"}), 400
+
     try:
+
         # Kreiraj HealthAuthority objekat
         new_health_authority = HealthAuthority(
             name=data.get("name"),
             type=data.get("type"),
             address=data.get("address"),
-            phone=data.get("phone")
+            phone=data.get("phone"),
+            password=generate_password_hash(data["password"])
         )
 
         # Ubaci u bazu kao dict
-        result = collection.insert_one(new_health_authority.to_dict())
-        if result.inserted_id:
-            # Slanje na blockchain - nova konekcija za ovaj request
-            new_account = {
-                "public_key": new_health_authority.public_key,
-                "private_key": new_health_authority.private_key
-            }
+       
+        # Slanje na blockchain - nova konekcija za ovaj request
+        new_account = {
+            "public_key": new_health_authority.public_key,
+            "private_key": new_health_authority.private_key
+        }
 
-            message = {
-                "type": "CLIENT_ADD_ACCOUNT",
-                "data": new_account
-            }
+        message = {
+            "type": "CLIENT_ADD_ACCOUNT",
+            "data": new_account
+        }
 
-            blockchain_success, blockchain_response = send_to_blockchain_per_request(message)
-            
-            response_data = {
-                "message": "Health Authority successfully added", 
-                "id": str(result.inserted_id)
-            }
-            
-            response =  blockchain_response
-            if blockchain_success:
-                response_data["blockchain_response"] = response["message"]
+        blockchain_success, blockchain_response = send_to_blockchain_per_request(message)
+        
+        response_data = {}
+        
+        response =  blockchain_response
+        if blockchain_success:
+            response_data["blockchain_response"] = response["message"]
+            result = collection.insert_one(new_health_authority.to_dict())
+
+            if result.inserted_id:
+                response_data["message"] = "Health Authority successfully added"
+                response_data["id"] = result.inserted_id
             else:
-                response_data["blockchain_error"] = response
-            
-            return jsonify(response_data), 201
+                return jsonify({"error": "Failed to insert health authority!"}), 500
         else:
-            return jsonify({"error": "Failed to insert patient"}), 500
+            response_data["blockchain_error"] = response
+        
+        return jsonify(response_data), 201
+      
 
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
 
 @app.route("/api/doctors", methods = ["POST"])
+@require_user_type('health_authorities')
 def add_doctor():
+    user, user_type = get_current_user()
 
-    #TODO iz jwt-a uzmi id health authoritija
     collection = db["doctors"]
     data = request.json
 
-    # Kreiraj HealthAuthority objekat
+    if not data:
+            return jsonify({"error": "No data provided"}), 400
+        
+    required_fields = ["first_name", "last_name", "password"]
+        
+    for field in required_fields:
+        if field not in data:
+            return jsonify({"error": f"Missing required field: {field}"}), 400
+
     new_doctor = Doctor(
         first_name=data["first_name"],
         last_name=data["last_name"],
-        health_authority_id=data.get("health_authority_id")
+        health_authority_id = user["_id"],
+        password=generate_password_hash(data["password"])
     )
 
     health_authorities_collection = db["health_authorities"]
@@ -210,16 +306,16 @@ def add_doctor():
     )
 
     if result.matched_count == 0:
-        return jsonify({"error": "HealthAuthority sa tim ID-jem nije pronađen"}), 404
+        return jsonify({"error": "HealthAuthority with this ID not found!"}), 404
 
 
-    # Ubaci u bazu kao dict
     collection.insert_one(new_doctor.to_dict())
 
     return jsonify({"message": "Doctor successfully added", "id": new_doctor._id}), 201
 
 
 @app.route("/api/health-records", methods=["POST"])
+@require_user_type('doctors')
 def add_health_record():
     health_records_collection = db["health_records"]
     patients_collection = db["patients"]
@@ -227,12 +323,34 @@ def add_health_record():
 
     data = request.json
 
+    if not data:
+        return jsonify({"error": "No data provided"}), 400
+
     new_id = uuid.uuid4().hex
     data["_id"] = new_id
 
     secret_key = generate_secret_key_b64()
 
+    user, user_type = get_current_user()
+
+    data["doctor_id"] = user["_id"]
+    data["doctor_first_name"] = user["first_name"]
+    data["doctor_last_name"] = user["last_name"] 
+    data["health_authority_id"] = user["health_authority_id"]
+    data["health_authority_name"] = health_authorities_collection.find_one({"_id": user["health_authority_id"]})["name"]
+
+    patient_dict = patients_collection.find_one({"_id": data["patient_id"]})
+    if not patient_dict:
+        return {"error": "Patient not found"}, 404
+
+    patient_dict = patients_collection.find_one({"_id": data["patient_id"]})
+    data["patient_first_name"] = patient_dict["first_name"]
+    data["patient_last_name"] = patient_dict["last_name"]
+
+    print(data)
     health_record_string_data = json.dumps(data)
+
+
     encrypted_data = encrypt(health_record_string_data, convert_secret_key_to_bytes(secret_key))
 
     health_record = {
@@ -260,7 +378,7 @@ def add_health_record():
         health_authority.public_key, 
         patient.public_key, 
         new_id,
-        datetime.now().isoformat(),
+        datetime.datetime.now().isoformat(),
         util.hash256(data)
     )
     transaction = Transaction(transaction_body)
@@ -290,7 +408,14 @@ def add_health_record():
                 if transaction_success:
                     # Transakcija je uspešno dodana u blockchain
                     result = health_records_collection.insert_one(health_record)
-                    
+                    update_result = health_authorities_collection.update_one(
+                        {
+                            "_id": health_authority_dict["_id"],
+                            "patients": {"$ne": data["patient_id"]}
+                        },
+                        {"$push": {"patients": data["patient_id"]}}
+                    )
+
                     return jsonify({
                         "message": "Health record successfully added and confirmed on blockchain",
                         "id": new_id,
@@ -324,14 +449,18 @@ def add_health_record():
 
 @app.route("/api/health-records/<string:hr_id>", methods=["GET"])
 def get_health_record(hr_id):
+    #TODO dodaj verifikaciju za proveru da li pacijent ili health care imaju dozvolu preko jwt, ako nemaju proveri da li body ima secret key
     health_records_collection = db["health_records"]
-    health_dict = health_records_collection.find_one({"_id": hr_id})
+    health_record_dict = health_records_collection.find_one({"_id": hr_id})
 
-    print(decrypt(health_dict["data"],convert_secret_key_to_bytes(health_dict["key"])))
-    return jsonify(json.loads(decrypt(health_dict["data"],convert_secret_key_to_bytes(health_dict["key"])))), 201
+    if not health_record_dict:
+        return {"error": "Health record not found"}, 404
+
+    return jsonify(json.loads(decrypt(health_record_dict["data"],convert_secret_key_to_bytes(health_record_dict["key"])))), 200
 
 
 @app.route("/api/health-records/verify/<string:hr_id>", methods=["GET"])
+@jwt_required()
 def verify_health_record(hr_id):
     health_records_collection = db["health_records"]
     data = request.json
@@ -355,7 +484,7 @@ def verify_health_record(hr_id):
                 }
         }
 
-        blockchain_success, blockchain_response = send_to_blockchain_per_request(message)
+        blockchain_success, blockchain_response = util.send_to_blockchain_per_request(message)
         response_data = {}
         response =  blockchain_response
 
@@ -369,6 +498,106 @@ def verify_health_record(hr_id):
 
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+
+@app.route("/api/health-records", methods=["GET"])
+@require_user_type("patients")
+def get_health_records_by_patient():
+
+    health_records_collection =  db['health_records']
+    health_records = []
+    filter = {}
+
+    user, user_type = get_current_user()
+
+    filter = {'patient_id': user["_id"]}
+
+    health_records_raw = list(health_records_collection.find(filter))
+
+    health_records = []
+
+    for health_record_raw in health_records_raw:
+        health_records.append(json.loads(decrypt(health_record_raw["data"],convert_secret_key_to_bytes(health_record_raw["key"]))))
+
+    return jsonify({"health_records":health_records}), 201
+
+
+
+@app.route("/api/health-records/patient/<string:patient_personal_id>", methods=["GET"])
+@require_user_type('doctors')
+def get_health_records_of_patient(patient_personal_id):
+
+    patients_collection = db["patients"] 
+
+    patient = patients_collection.find_one({"personal_id":patient_personal_id}) 
+
+    if patient is None:
+        return jsonify({"message":"Patinet not found!"}), 400
+
+
+    health_records_collection =  db['health_records']
+    user, user_type  = get_current_user()
+
+    own = request.args.get('own')
+
+    if own == "true":
+        
+        health_records = []
+        
+        filter = {'health_authority_id': user["health_authority_id"]}
+        
+        health_records_raw = list(health_records_collection.find(filter))
+
+        health_records = []
+
+        for health_record_raw in health_records_raw:
+            health_records.append(json.loads(decrypt(health_record_raw["data"],convert_secret_key_to_bytes(health_record_raw["key"]))))
+
+        return jsonify({"health_records":health_records}), 201
+    
+    patient_public_key = patient["public_key"]
+    
+    try:
+
+        message = {
+                    "type": "CLIENT_GET_ALL_TRANSACTIONS_OF_PATIENT",
+                    "data": patient_public_key
+        }
+
+        blockchain_success, blockchain_response = send_to_blockchain_per_request(message)
+        response_data = {}
+            
+        response =  blockchain_response
+        
+        if blockchain_success:
+            health_authority_collection = db["health_authorities"]
+            health_authority = health_authority_collection.find_one({"_id":user["health_authority_id"]})
+
+            health_records_created_by_different_ha  = [hr for hr in response["message"] if hr["creator"] != health_authority["public_key"]]
+
+
+            for health_record in health_records_created_by_different_ha:
+                ha = health_authority_collection.find_one({"public_key":health_record["creator"]})
+                health_record["health_authority_id"] = ha["_id"]
+                health_record["health_authority_name"] = ha["name"]
+
+                health_record["added_at_blockchain"] = health_record["date"]
+
+                del health_record["patient"]
+                del health_record["creator"]
+                del health_record["date"]
+
+
+            response_data["blockchain_response"] = health_records_created_by_different_ha
+
+            
+        else:
+            response_data["blockchain_error"] = response
+         
+        return jsonify(response_data), 201
+
+    except Exception as e:
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+
 
 if __name__ == "__main__":
     app.run(debug=True)

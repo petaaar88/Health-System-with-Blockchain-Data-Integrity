@@ -2,7 +2,7 @@ import uuid
 from blockchain.backend.core.account import Account
 
 class HealthAuthority(Account):
-    def __init__(self, name = None, type = None, address = None, phone = None):
+    def __init__(self, name = None, type = None, address = None, phone = None, password = None):
 
         if(name == None):
             return
@@ -14,12 +14,15 @@ class HealthAuthority(Account):
         self.type = type
         self.address = address
         self.phone = phone
+        self.password = password
+
         self.doctors = []
         self.patients = []
 
     def to_dict(self):
         return {
             "_id": self._id,
+            "password": self.password,
             "public_key": self.public_key,
             "private_key":self.private_key,
             "name": self.name,
@@ -36,6 +39,7 @@ class HealthAuthority(Account):
         """Kreira HealthAuthority objekat iz dict-a (iz MongoDB)"""
         authority = cls.__new__(cls)
         authority._id = data.get("_id")
+        authority.password = data.get("password"),
         authority.public_key = data.get("public_key")
         authority.private_key = data.get("private_key")
         authority.name = data.get("name")
