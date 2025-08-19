@@ -4,11 +4,12 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)) + "/..")
 import uuid
 import json
 import datetime
-
+from datetime import timezone
 from flask import Flask, request, jsonify
 from pymongo import MongoClient
-from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
+from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity,decode_token
 from werkzeug.security import check_password_hash, generate_password_hash
+from flask_cors import CORS
 
 from entities.patient import Patient
 from entities.health_authority import HealthAuthority
@@ -20,14 +21,78 @@ from util.util import generate_secret_key_b64, convert_secret_key_to_bytes, encr
 
 
 app = Flask(__name__)
+CORS(app)
 
 app.config['JWT_SECRET_KEY'] = 'your-secret-key-here'  # Promeni ovo u produkciji!
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = datetime.timedelta(hours=1)  # Token ističe za 1 sat
 jwt = JWTManager(app)
 
+
 # Povezivanje na lokalnu MongoDB bazu
 client = MongoClient("mongodb://localhost:27017/")
 db = client["cs203_project-health_system"]  # baza
+
+@app.route('/api/auth/verify', methods=['POST'])
+def verify_token():
+    """
+    Endpoint za verifikaciju tokena sa flask-jwt-extended
+    """
+    try:
+        # Uzmi token iz Authorization header-a
+        auth_header = request.headers.get('Authorization')
+        token = None
+        
+        if auth_header and auth_header.startswith('Bearer '):
+            token = auth_header.split(' ')[1]
+        else:
+            # Ako nema u header-u, pokušaj iz request body
+            data = request.get_json()
+            if data and 'token' in data:
+                token = data['token']
+        
+        if not token:
+            return jsonify({
+                'valid': False,
+                'message': 'Token nije pronađen'
+            }), 400
+        
+        # Verifikacija tokena sa flask-jwt-extended
+        try:
+            # Dekodiranje tokena
+            decoded_token = decode_token(token)
+            
+            # Dodatna provera expiration-a
+            exp_timestamp = decoded_token.get('exp')
+            current_timestamp = datetime.datetime.now(timezone.utc).timestamp()
+            
+            if exp_timestamp and current_timestamp > exp_timestamp:
+                return jsonify({
+                    'valid': False,
+                    'message': 'Token je istekao'
+                }), 401
+            
+            # Token je valjan
+            return jsonify({
+                'valid': True,
+                'message': 'Token je valjan',
+                'user_id': decoded_token.get('sub'),  # 'sub' je standard za user_id u JWT
+                'user_data': decoded_token,
+                'expires_at': datetime.datetime.fromtimestamp(exp_timestamp).isoformat() if exp_timestamp else None
+            }), 200
+            
+        except Exception as e:
+            # Sve JWT greške će biti uhvaćene ovde
+            return jsonify({
+                'valid': False,
+                'message': 'Token nije valjan'
+            }), 401
+            
+    except Exception as e:
+        return jsonify({
+            'valid': False,
+            'message': f'Greška pri verifikaciji tokena: {str(e)}'
+        }), 500
+    
 
 def get_current_user():
     """Vraća podatke o trenutno ulogovanom korisniku"""
@@ -198,6 +263,7 @@ def add_patient():
                 return jsonify({"error": "Failed to insert patient!"}), 500
         else:
             response_data["blockchain_error"] = response
+            return jsonify(response_data), 500
         
         return jsonify(response_data), 201
        
@@ -212,7 +278,7 @@ def add_health_authority():
     data = request.json
     
     if not data:
-            return jsonify({"error": "No data provided"}), 400
+        return jsonify({"error": "No data provided"}), 400
         
     required_fields = ["name", "type", "address", "phone", "password"]
         
@@ -221,7 +287,7 @@ def add_health_authority():
             return jsonify({"error": f"Missing required field: {field}"}), 400
 
     try:
-
+        
         # Kreiraj HealthAuthority objekat
         new_health_authority = HealthAuthority(
             name=data.get("name"),
@@ -260,6 +326,8 @@ def add_health_authority():
                 return jsonify({"error": "Failed to insert health authority!"}), 500
         else:
             response_data["blockchain_error"] = response
+
+            return jsonify(response_data), 500
         
         return jsonify(response_data), 201
       
@@ -327,6 +395,7 @@ def add_health_record():
 
     user, user_type = get_current_user()
 
+    data["date"] = datetime.datetime.now().strftime("%d-%m-%Y")
     data["doctor_id"] = user["_id"]
     data["doctor_first_name"] = user["first_name"]
     data["doctor_last_name"] = user["last_name"] 
@@ -441,7 +510,7 @@ def add_health_record():
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
 
-@app.route("/api/health-records/decrypt/<string:hr_id>", methods=["GET"])
+@app.route("/api/health-records/decrypt/<string:hr_id>", methods=["POST"])
 @require_user_type("doctors")
 def decrypt_health_record(hr_id):
     
@@ -454,8 +523,6 @@ def decrypt_health_record(hr_id):
     
     user, user_type = get_current_user()
 
-    if health_record_dict["health_authority_id"] != user["health_authority_id"]:
-        return jsonify({"message":"Dont have access!"}), 400
 
     data = request.json
 
@@ -467,12 +534,22 @@ def decrypt_health_record(hr_id):
 
     if health_record_dict["key"] != data["secret_key"]:
         return jsonify({"message":"Secret key invalid!"}), 400
+    
+    decrypted_health_record = json.loads(decrypt(health_record_dict["data"],convert_secret_key_to_bytes(health_record_dict["key"])))
+
+    health_record_with_key = {
+        "health_record": decrypted_health_record,
+        "key": data["secret_key"]
+    }
+
+    request_collection = db["requests_for_health_records"]
+
+    request_collection.delete_one({"key":data["secret_key"],"health_record_id":hr_id})
+
+    return jsonify(health_record_with_key), 200
 
 
-    return jsonify(json.loads(decrypt(health_record_dict["data"],convert_secret_key_to_bytes(health_record_dict["key"])))), 200
-
-
-@app.route("/api/health-records/verify/<string:hr_id>", methods=["GET"])
+@app.route("/api/health-records/verify/<string:hr_id>", methods=["POST"])
 @jwt_required()
 def verify_health_record(hr_id):
     health_records_collection = db["health_records"]
@@ -497,7 +574,7 @@ def verify_health_record(hr_id):
                 }
         }
 
-        blockchain_success, blockchain_response = util.send_to_blockchain_per_request(message)
+        blockchain_success, blockchain_response = send_to_blockchain_per_request(message)
         response_data = {}
         response =  blockchain_response
 
@@ -505,6 +582,7 @@ def verify_health_record(hr_id):
             response_data["blockchain_response"] = response["message"]
         else:
             response_data["blockchain_error"] = response
+            return jsonify(response_data), 500
                 
         return jsonify(response_data), 200
        
@@ -516,7 +594,7 @@ def verify_health_record(hr_id):
 @require_user_type("patients")
 def get_health_records_by_patient():
 
-    health_records_collection =  db['health_records']
+    health_records_collection = db['health_records']
     health_records = []
     filter = {}
 
@@ -529,9 +607,29 @@ def get_health_records_by_patient():
     health_records = []
 
     for health_record_raw in health_records_raw:
-        health_records.append(json.loads(decrypt(health_record_raw["data"],convert_secret_key_to_bytes(health_record_raw["key"]))))
+        decrypted_health_record = json.loads(decrypt(health_record_raw["data"], convert_secret_key_to_bytes(health_record_raw["key"])))
+        
+        health_record_with_key = {
+            "health_record": decrypted_health_record,
+            "key": health_record_raw["key"]
+        }
+        
+        health_records.append(health_record_with_key)
 
-    return jsonify({"health_records":health_records}), 201
+    return jsonify({"health_records": health_records}), 201
+
+@app.route("/api/health-records/secret_key/<string:hr_id>", methods=["GET"])
+@require_user_type("patients")
+def get_secret_key(hr_id):
+    user, user_type = get_current_user()
+    hr_collection = db["health_records"]
+    
+    hr = hr_collection.find_one({"patient_id":user["_id"],"_id":hr_id})
+
+    if not hr:
+        return jsonify({"message":"Health record not found!"})
+
+    return jsonify({"secret_key":hr["key"]}), 200
 
 
 
@@ -563,7 +661,12 @@ def get_health_records_of_patient(patient_personal_id):
         health_records = []
 
         for health_record_raw in health_records_raw:
-            health_records.append(json.loads(decrypt(health_record_raw["data"],convert_secret_key_to_bytes(health_record_raw["key"]))))
+            decrypted_health_record = json.loads(decrypt(health_record_raw["data"],convert_secret_key_to_bytes(health_record_raw["key"])))
+            health_record_with_key = {
+                "health_record": decrypted_health_record,
+                "key": health_record_raw["key"]
+            }
+            health_records.append(health_record_with_key)
 
         return jsonify({"health_records":health_records}), 201
     
@@ -587,6 +690,7 @@ def get_health_records_of_patient(patient_personal_id):
 
             health_records_created_by_different_ha  = [hr for hr in response["message"] if hr["creator"] != health_authority["public_key"]]
 
+            requests_collection = db["requests_for_health_records"]
 
             for health_record in health_records_created_by_different_ha:
                 ha = health_authority_collection.find_one({"public_key":health_record["creator"]})
@@ -595,6 +699,12 @@ def get_health_records_of_patient(patient_personal_id):
 
                 health_record["added_at_blockchain"] = health_record["date"]
                 health_record["patient_id"] = patients_collection.find_one({"public_key":health_record["patient"]})["_id"]
+
+                request_result =requests_collection.find_one({"health_record_id":health_record["health_record_id"],"health_authority_id":user["health_authority_id"]})
+
+                if request_result:
+                    if "key" in request_result:
+                        health_record["key"] = request_result["key"]
 
                 del health_record["patient"]
                 del health_record["creator"]
@@ -607,7 +717,7 @@ def get_health_records_of_patient(patient_personal_id):
         else:
             response_data["blockchain_error"] = response
          
-        return jsonify(response_data), 201
+        return jsonify(response_data), 200
 
     except Exception as e:
         return jsonify({"error": f"An error occurred: {str(e)}"}), 500
@@ -647,12 +757,14 @@ def add_request():
 def get_patient_requests_by_patient():
     user, user_type = get_current_user()
     requests_collection = db["requests_for_health_records"]
-
+    ha_collection = db["health_authorities"]
     cursor = requests_collection.find({"patient_id":user["_id"]})
 
     requests = []
     for request in cursor:
         if "key" not in request:
+            ha = ha_collection.find_one({'_id':request["health_authority_id"]})
+            request["health_authority_name"] = ha["name"]
             requests.append(request)
 
     return jsonify(requests), 200
@@ -694,7 +806,7 @@ def delete_request(request_id):
 def accept_request(request_id):
 
     data = request.json
-
+    print(data)
     if data is None:
         return jsonify({"error": "Secret key not provided!"}), 400
 
@@ -722,12 +834,17 @@ def accept_request(request_id):
 @jwt_required()
 def get_doctor(doctor_id):
     doctors_collection = db["doctors"]
+    health_authority_collection = db["health_authorities"]
 
     doctor = doctors_collection.find_one({"_id":doctor_id})
     if doctor is None:
         return jsonify({"message":"Doctor not found!"}), 400
     
     del doctor["password"]
+
+    ha = health_authority_collection.find_one({"_id": doctor["health_authority_id"]})
+    doctor["health_authority_name"] = ha["name"]
+
     return jsonify(doctor), 200
 
 @app.route("/api/health_authority/<string:ha_id>", methods = ["GET"])

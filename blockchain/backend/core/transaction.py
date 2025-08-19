@@ -35,7 +35,7 @@ class Transaction:
         if util.verify_signature(bytes_object, transaction.signature, util.get_raw_key(transaction.body.creator)) is False:
             return False
 
-        required_keys = ["_id", "patient_id", "patient_first_name","patient_last_name","doctor_first_name","doctor_last_name","doctor_id","health_authority_name","health_authority_id"]
+        required_keys = ["_id", "patient_id", "patient_first_name","patient_last_name","doctor_first_name","doctor_last_name","doctor_id","health_authority_name","health_authority_id","date"]
 
         if all(key in health_record for key in required_keys) is False or transaction.body.health_record_id == None or transaction.body.date is None:
             print(f"❌ Transaction {transaction.id} is invalid!") 
