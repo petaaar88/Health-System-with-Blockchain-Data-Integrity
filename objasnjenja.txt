@@ -1,1 +1,0 @@
-TransactionBody - postoji zato sto moze da se desi da dodam jos neko polje koje ima transackija. Zbog toga je mnogo lakse na se potpise. Dinamicki se menja.
