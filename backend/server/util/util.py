@@ -3,6 +3,8 @@ import websockets
 import asyncio
 import json
 from bson import ObjectId, Binary
+from dotenv import load_dotenv
+import os
 
 from Crypto.Cipher import AES
 from Crypto.Random import get_random_bytes
@@ -31,8 +33,8 @@ def decrypt(enc_data, key):
 async def send_to_blockchain_and_wait_response(message, timeout=60):
    
     try:
-        
-        uri = "ws://localhost:8765"
+        load_dotenv()
+        uri = os.getenv("PEER_FOR_COMMUNICATION")
         
         async with websockets.connect(uri) as websocket:
             

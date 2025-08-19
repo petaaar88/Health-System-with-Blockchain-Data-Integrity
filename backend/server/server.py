@@ -10,6 +10,7 @@ from pymongo import MongoClient
 from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity,decode_token
 from werkzeug.security import check_password_hash, generate_password_hash
 from flask_cors import CORS
+from dotenv import load_dotenv
 
 from entities.patient import Patient
 from entities.health_authority import HealthAuthority
@@ -19,17 +20,18 @@ from blockchain.backend.util import util
 from entities.doctor import Doctor
 from util.util import generate_secret_key_b64, convert_secret_key_to_bytes, encrypt, decrypt, send_to_blockchain_per_request, serialize_doc
 
+load_dotenv()
 
 app = Flask(__name__)
 CORS(app)
 
-app.config['JWT_SECRET_KEY'] = 'your-secret-key-here'  # Promeni ovo u produkciji!
+app.config['JWT_SECRET_KEY'] = os.getenv("JWT_SECRET")
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = datetime.timedelta(hours=1)  # Token ističe za 1 sat
 jwt = JWTManager(app)
 
 
-client = MongoClient("mongodb://localhost:27017/")
-db = client["cs203_project-health_system"]  # baza
+client = MongoClient(os.getenv("DB"))
+db = client[os.getenv("DB_NAME")]  # baza
 
 @app.route('/api/auth/verify', methods=['POST'])
 def verify_token():
