@@ -37,33 +37,10 @@ def read_from_json_file(path:str):
     
     return data
 
-# obrisi ovu metodu, samo je pokazna
-def generate_rsa_key():
-    key = RSA.generate(2048)
-
-    private_key_str = key.export_key().decode()
-    public_key_str = key.public_key().export_key().decode()
-
-    user = {
-        "id":1,
-        "public_key": public_key_str,
-        "private_key":private_key_str
-    }
-
-    users =  read_from_json_file("data.json")
-
-    if isinstance(users,list) == False:
-        users = []
-    
-    users.append(user)
-    write_to_json_file('data.json',users)
-
 def sign_data(data:bytes, key):
 
-    # Heširaj poruku
     data_hash = SHA256.new(data)
 
-    # Napravi potpis
     signature = pss.new(key).sign(data_hash)
 
     return signature
@@ -82,27 +59,23 @@ def verify_signature(data:bytes, signature, key):
     return True
 
 def object_to_canonical_bytes_json(obj):
-    """
-    Konvertuje objekat u deterministički byte niz koristeći JSON.
-    Ovo je najsigurniji pristup za većinu slučajeva.
-    """
+    
     if hasattr(obj, '__dict__'):
-        # Za custom objekte
+       
         data = obj.__dict__.copy()
     elif isinstance(obj, dict):
         data = obj
     elif hasattr(obj, '_asdict'):
-        # Za namedtuple
+        
         data = obj._asdict()
     else:
-        # Za dataclass ili druge objekte
+        
         try:
             data = asdict(obj)
         except:
-            # Fallback za druge tipove
+            
             data = {"value": str(obj), "type": type(obj).__name__}
     
-    # Sortiraj ključeve za determinističnost
     json_str = json.dumps(data, sort_keys=True, separators=(',', ':'), ensure_ascii=False)
     return json_str.encode('utf-8')
 
@@ -116,10 +89,7 @@ def get_current_time_precise():
     sati = trenutno_vreme.hour
     minuti = trenutno_vreme.minute
     sekunde = trenutno_vreme.second
-    # Mikrosekunde su sada prikazane direktno
+   
     mikrosekunde = trenutno_vreme.microsecond
 
-    # Formiranje f-stringa sa svim delovima vremena
-    # Sati, minuti i sekunde dobijaju vodeću nulu ako su manji od 10 (npr. '05')
-    # Mikrosekunde se prikazuju sa 6 cifara, popunjene vodećim nulama
     return f"{sati:02d}:{minuti:02d}:{sekunde:02d}.{mikrosekunde:06d}"

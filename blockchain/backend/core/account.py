@@ -1,7 +1,7 @@
 import os
 from Crypto.PublicKey import RSA
-from blockchain.backend.core.transaction import Transaction
-from blockchain.backend.util import util
+from .transaction import Transaction
+from ..util import util
 
 class Account:
 

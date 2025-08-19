@@ -41,12 +41,9 @@ class Patient(Account):
     
     @classmethod
     def from_dict(cls, data):
-        """Kreira Patient objekat iz dict-a (iz MongoDB)"""
-        # Kreiraj prazan objekat
+        
         patient = cls.__new__(cls)
         
-        
-        # Mapiranje podataka
         patient._id = data.get("_id")
         patient.public_key = data.get("public_key")
         patient.private_key = data.get("private_key")

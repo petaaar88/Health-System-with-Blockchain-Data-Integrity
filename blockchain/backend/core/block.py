@@ -1,8 +1,8 @@
 from __future__ import annotations
 from datetime import datetime
-from blockchain.backend.util import util
-from blockchain.backend.core.transaction import Transaction
-from blockchain.backend.core.block_header import BlockHeader
+from backend.util import util
+from backend.core.transaction import Transaction
+from backend.core.block_header import BlockHeader
 
 class Block:
     def __init__(self, block_header: BlockHeader, transaction: Transaction):

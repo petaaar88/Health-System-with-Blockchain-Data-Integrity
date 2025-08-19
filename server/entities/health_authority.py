@@ -36,7 +36,7 @@ class HealthAuthority(Account):
     
     @classmethod
     def from_dict(cls, data):
-        """Kreira HealthAuthority objekat iz dict-a (iz MongoDB)"""
+       
         authority = cls.__new__(cls)
         authority._id = data.get("_id")
         authority.password = data.get("password"),

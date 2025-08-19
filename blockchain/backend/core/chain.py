@@ -1,9 +1,9 @@
 from __future__ import annotations
 import os
-from blockchain.backend.core.block import Block
-from blockchain.backend.core.block_header import BlockHeader
-from blockchain.backend.core.transaction import Transaction
-from blockchain.backend.util import util
+from backend.core.block import Block
+from backend.core.block_header import BlockHeader
+from backend.core.transaction import Transaction
+from backend.util import util
 
 class Chain:
     def __init__(self, miner, initial_time_to_mine = 30000, initial_difficulty = 5):

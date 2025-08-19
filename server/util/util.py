@@ -29,19 +29,17 @@ def decrypt(enc_data, key):
     return plaintext.decode("utf-8")
 
 async def send_to_blockchain_and_wait_response(message, timeout=60):
-    """
-    Šalje poruku blockchain peer-u i čeka odgovor
-    """
+   
     try:
-        # Konektuj se na blockchain peer (pretpostavljam port 8765)
+        
         uri = "ws://localhost:8765"
         
         async with websockets.connect(uri) as websocket:
-            # Pošalji poruku
+            
             await websocket.send(json.dumps(message))
             print(f"📤 Sent to blockchain: {message['type']}")
             
-            # Čekaj odgovor sa timeout-om
+           
             response = await asyncio.wait_for(websocket.recv(), timeout=timeout)
             response_data = json.loads(response)
             
@@ -54,11 +52,9 @@ async def send_to_blockchain_and_wait_response(message, timeout=60):
         return False, {"error": f"Blockchain connection error: {str(e)}"}
 
 def send_to_blockchain_per_request(message):
-    """
-    Wrapper funkcija za korišćenje u Flask route-u
-    """
+   
     try:
-        # Pokreni async funkciju iz sync konteksta
+       
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:

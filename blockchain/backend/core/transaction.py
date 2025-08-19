@@ -1,7 +1,7 @@
 from __future__ import annotations
 import uuid
-from blockchain.backend.core.transaction_body import TransactionBody
-from blockchain.backend.util import util
+from .transaction_body import TransactionBody
+from ..util import util
 
 class Transaction:
     def __init__(self, transaction_body:TransactionBody):

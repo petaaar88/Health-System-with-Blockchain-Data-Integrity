@@ -28,24 +28,21 @@ app.config['JWT_ACCESS_TOKEN_EXPIRES'] = datetime.timedelta(hours=1)  # Token is
 jwt = JWTManager(app)
 
 
-# Povezivanje na lokalnu MongoDB bazu
 client = MongoClient("mongodb://localhost:27017/")
 db = client["cs203_project-health_system"]  # baza
 
 @app.route('/api/auth/verify', methods=['POST'])
 def verify_token():
-    """
-    Endpoint za verifikaciju tokena sa flask-jwt-extended
-    """
+    
     try:
-        # Uzmi token iz Authorization header-a
+        
         auth_header = request.headers.get('Authorization')
         token = None
         
         if auth_header and auth_header.startswith('Bearer '):
             token = auth_header.split(' ')[1]
         else:
-            # Ako nema u header-u, pokušaj iz request body
+            
             data = request.get_json()
             if data and 'token' in data:
                 token = data['token']
@@ -56,12 +53,12 @@ def verify_token():
                 'message': 'Token nije pronađen'
             }), 400
         
-        # Verifikacija tokena sa flask-jwt-extended
+        
         try:
-            # Dekodiranje tokena
+           
             decoded_token = decode_token(token)
             
-            # Dodatna provera expiration-a
+            
             exp_timestamp = decoded_token.get('exp')
             current_timestamp = datetime.datetime.now(timezone.utc).timestamp()
             
@@ -71,36 +68,36 @@ def verify_token():
                     'message': 'Token je istekao'
                 }), 401
             
-            # Token je valjan
+           
             return jsonify({
                 'valid': True,
-                'message': 'Token je valjan',
+                'message': 'Token is valid',
                 'user_id': decoded_token.get('sub'),  # 'sub' je standard za user_id u JWT
                 'user_data': decoded_token,
                 'expires_at': datetime.datetime.fromtimestamp(exp_timestamp).isoformat() if exp_timestamp else None
             }), 200
             
         except Exception as e:
-            # Sve JWT greške će biti uhvaćene ovde
+            
             return jsonify({
                 'valid': False,
-                'message': 'Token nije valjan'
+                'message': 'Token is invalid!'
             }), 401
             
     except Exception as e:
         return jsonify({
             'valid': False,
-            'message': f'Greška pri verifikaciji tokena: {str(e)}'
+            'message': f'Error while token verification: {str(e)}'
         }), 500
     
 
 def get_current_user():
-    """Vraća podatke o trenutno ulogovanom korisniku"""
+   
     from flask_jwt_extended import get_jwt_identity
     
     user_id = get_jwt_identity()
     
-    # Definišemo kolekcije
+    
     collections = {
         'patients': db['patients'],
         'health_authorities': db['health_authorities'], 
@@ -108,7 +105,7 @@ def get_current_user():
         'central_authority': db['central_authority']
     }
     
-    # Pretražujemo kroz sve kolekcije da pronađemo korisnika po ID-u
+   
     for collection_name, collection in collections.items():
         user = collection.find_one({'_id': user_id})
         if user:
@@ -120,20 +117,20 @@ def get_current_user():
 def expired_token_callback(jwt_header, jwt_payload):
     return jsonify({'message': 'Token expired'}), 401
 
-# Handler za neispravne tokene
+
 @jwt.invalid_token_loader
 def invalid_token_callback(error):
     return jsonify({'message': 'Invalid token!'}), 401
 
-# Handler za nedostajuće tokene
+
 @jwt.unauthorized_loader
 def missing_token_callback(error):
     return jsonify({'message': 'Token required to access!'}), 401
 
 
-# Decorator za proveru user type-a (zadržao sam i ovaj)
+
 def require_user_type(*allowed_types):
-    """Decorator koji dozvoljava pristup samo određenim tipovima korisnika"""
+   
     def decorator(f):
         from functools import wraps
         
@@ -288,7 +285,7 @@ def add_health_authority():
 
     try:
         
-        # Kreiraj HealthAuthority objekat
+       
         new_health_authority = HealthAuthority(
             name=data.get("name"),
             type=data.get("type"),
@@ -297,9 +294,7 @@ def add_health_authority():
             password=generate_password_hash(data["password"])
         )
 
-        # Ubaci u bazu kao dict
        
-        # Slanje na blockchain - nova konekcija za ovaj request
         new_account = {
             "public_key": new_health_authority.public_key,
             "private_key": new_health_authority.private_key
@@ -436,7 +431,7 @@ def add_health_record():
     patient = Patient.from_dict(patient_dict)
     health_authority = HealthAuthority.from_dict(health_authority_dict)
 
-    # Kreiraj transakciju
+   
     transaction_body = TransactionBody(
         health_authority.public_key, 
         patient.public_key, 
@@ -448,7 +443,7 @@ def add_health_record():
     health_authority.sign(transaction)
     
     try:
-        # Pošalji na blockchain i čekaj odgovor
+        
         message = {
             "type": "CLIENT_ADD_TRANSACTION",
             "data": {
@@ -460,7 +455,7 @@ def add_health_record():
         blockchain_success, blockchain_response = send_to_blockchain_per_request(message)
         
         if blockchain_success:
-            # Proveri tip odgovora od blockchain-a
+            
             response_type = blockchain_response.get("type")
             
             if response_type == "TRANSACTION_RESULT":
@@ -469,7 +464,7 @@ def add_health_record():
                 transaction_id = blockchain_response.get("transaction_id")
                 
                 if transaction_success:
-                    # Transakcija je uspešno dodana u blockchain
+                   
                     result = health_records_collection.insert_one(health_record)
                     update_result = health_authorities_collection.update_one(
                         {
@@ -488,20 +483,20 @@ def add_health_record():
                     }), 201
                     
                 else:
-                    # Transakcija je odbijena
+                  
                     return jsonify({
                         "error": "Transaction rejected by blockchain network",
                         "blockchain_message": blockchain_message,
                         "transaction_id": transaction_id
                     }), 400
             else:
-                # Nepoznat tip odgovora
+                
                 return jsonify({
                     "error": "Unexpected blockchain response",
                     "response": blockchain_response
                 }), 500
         else:
-            # Greška u komunikaciji sa blockchain-om
+            
             return jsonify({
                 "error": "Failed to communicate with blockchain",
                 "blockchain_error": blockchain_response.get("error", "Unknown error")
@@ -790,7 +785,7 @@ def delete_request(request_id):
     requests_collection = db["requests_for_health_records"]
 
     try:
-        # Proverite da li zahtev pripada trenutnom korisniku
+        
         result = requests_collection.delete_one({"_id": request_id})
         
         if result.deleted_count == 1:
@@ -818,8 +813,8 @@ def accept_request(request_id):
             return jsonify({"error": "Dont have access!"}), 400
         
         result = requests_collection.update_one(
-            {"_id": request_id},          # filter kojim biraš dokument
-            {"$set": {"key": data["secret_key"]}}  # novo polje koje dodaješ
+            {"_id": request_id},          
+            {"$set": {"key": data["secret_key"]}}  
         )
         
         if result.modified_count > 0:

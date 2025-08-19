@@ -1,13 +1,12 @@
 import uuid
 from datetime import datetime
 
-
 class BlockHeader:
     def __init__(self,height, difficulty, miner, previous_block_hash=None):
-        self.height = height # redni broj bloka u blokchainu, krece od 0
+        self.height = height 
         self.id = uuid.uuid4().hex
         self.previous_block_hash = previous_block_hash
-        self.merkle_root = '' # root merkle tree-a(hash tree), koje nastaje tako sto je svaki leaf transkacija iz bloka
+        self.merkle_root = '' # root merkle tree-a(hash tree)
         self.timestamp = "" #timestamp trenutnog bloka
         self.difficulty = difficulty #target difficulty
         self.nonce = 0
